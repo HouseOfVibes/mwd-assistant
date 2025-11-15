@@ -1,0 +1,64 @@
+{
+  "mcpServers": {
+    "memory": {
+      "command": "uvx",
+      "args": ["memory-mcp"],
+      "description": "Long-term memory storage for multi-AI coordination. Stores client context, project history, and brand guidelines."
+    },
+    "supabase": {
+      "command": "npx",
+      "args": ["-y", "supabase-mcp-server"],
+      "env": {
+        "SUPABASE_URL": "${SUPABASE_URL}",
+        "SUPABASE_KEY": "${SUPABASE_KEY}"
+      },
+      "description": "Supabase database integration (TypeScript version - requires Node.js). For project data, client intake, and meeting notes."
+    },
+    "git": {
+      "command": "uvx",
+      "args": [
+        "mcp-server-git",
+        "--repository",
+        "/home/user/mwd-agent"
+      ],
+      "description": "Git repository integration for mwd-agent codebase management."
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/home/user/mwd-agent"
+      ],
+      "description": "Secure file operations for templates, brand assets, and deliverables."
+    },
+    "github": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-github"
+      ],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+      },
+      "description": "GitHub integration for repository management and issue tracking."
+    },
+    "postgres": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres",
+        "postgresql://${SUPABASE_URL}"
+      ],
+      "description": "PostgreSQL database access for querying project data."
+    },
+    "sequential-thinking": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ],
+      "description": "Enhanced reasoning for complex multi-agent workflow orchestration."
+    }
+  }
+}
