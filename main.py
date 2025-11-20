@@ -11,6 +11,11 @@ from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 from anthropic import Anthropic
 from integrations.invoice_system import InvoiceSystemClient
+from integrations.gemini import GeminiClient
+from integrations.openai_client import OpenAIClient
+from integrations.perplexity import PerplexityClient
+from integrations.notion import NotionClient
+from integrations.google_workspace import GoogleWorkspaceClient
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -22,18 +27,30 @@ load_dotenv()
 # Initialize Flask app
 app = Flask(__name__)
 
-# Initialize Anthropic client
+# Initialize AI clients
 anthropic_client = Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
+gemini_client = GeminiClient()
+openai_client = OpenAIClient()
+perplexity_client = PerplexityClient()
 
-# Initialize Invoice System client
+# Initialize Integration clients
 invoice_client = InvoiceSystemClient()
+notion_client = NotionClient()
+google_client = GoogleWorkspaceClient()
 
 # Configuration check
 def check_config():
     """Check which services are configured"""
     config_status = {
+        # AI Services
         'anthropic': 'configured' if os.getenv('ANTHROPIC_API_KEY') else 'missing',
+        'gemini': 'configured' if gemini_client.is_configured() else 'optional',
+        'openai': 'configured' if openai_client.is_configured() else 'optional',
+        'perplexity': 'configured' if perplexity_client.is_configured() else 'optional',
+        # Integrations
         'invoice_system': 'configured' if invoice_client.is_configured() else 'optional',
+        'notion': 'configured' if notion_client.is_configured() else 'optional',
+        'google_workspace': 'configured' if google_client.is_configured() else 'optional',
         'supabase': 'configured' if os.getenv('SUPABASE_URL') else 'optional',
         'slack': 'configured' if os.getenv('SLACK_TOKEN') else 'optional'
     }
@@ -143,7 +160,7 @@ def home():
     return jsonify({
         'status': 'running',
         'service': 'MWD Agent',
-        'version': '1.1.0',
+        'version': '2.0.0',
         'config': config,
         'endpoints': {
             'strategy': [
@@ -151,6 +168,28 @@ def home():
                 'POST /website',
                 'POST /social',
                 'POST /copywriting'
+            ],
+            'ai': [
+                'POST /ai/gemini/meeting-notes',
+                'POST /ai/gemini/summarize',
+                'POST /ai/gemini/orchestrate',
+                'POST /ai/openai/team-message',
+                'POST /ai/openai/slack-message',
+                'POST /ai/openai/summarize-thread',
+                'POST /ai/perplexity/research',
+                'POST /ai/perplexity/competitors',
+                'POST /ai/perplexity/client-email'
+            ],
+            'notion': [
+                'POST /notion/project',
+                'POST /notion/meeting-notes',
+                'GET /notion/search'
+            ],
+            'google': [
+                'POST /google/drive/folder',
+                'POST /google/drive/project-structure',
+                'POST /google/docs/document',
+                'POST /google/docs/deliverable'
             ],
             'webhooks': [
                 'POST /api/intake',
@@ -189,6 +228,259 @@ def copywriting():
     """Generate marketing copy"""
     client_data = request.json
     result = call_claude(COPYWRITING_PROMPT, client_data)
+    return jsonify(result)
+
+
+# =============================================================================
+# GEMINI AI ENDPOINTS
+# =============================================================================
+
+@app.route('/ai/gemini/meeting-notes', methods=['POST'])
+def gemini_meeting_notes():
+    """Generate meeting notes from transcript"""
+    data = request.json
+    transcript = data.get('transcript', '')
+    participants = data.get('participants', [])
+    result = gemini_client.generate_meeting_notes(transcript, participants)
+    return jsonify(result)
+
+
+@app.route('/ai/gemini/summarize', methods=['POST'])
+def gemini_summarize():
+    """Summarize a document"""
+    data = request.json
+    content = data.get('content', '')
+    doc_type = data.get('doc_type', 'general')
+    result = gemini_client.summarize_document(content, doc_type)
+    return jsonify(result)
+
+
+@app.route('/ai/gemini/orchestrate', methods=['POST'])
+def gemini_orchestrate():
+    """Orchestrate multi-AI workflow"""
+    data = request.json
+    task = data.get('task', '')
+    context = data.get('context', {})
+    result = gemini_client.orchestrate_workflow(task, context)
+    return jsonify(result)
+
+
+# =============================================================================
+# OPENAI ENDPOINTS
+# =============================================================================
+
+@app.route('/ai/openai/team-message', methods=['POST'])
+def openai_team_message():
+    """Draft internal team communication"""
+    data = request.json
+    context = data.get('context', '')
+    message_type = data.get('message_type', 'update')
+    tone = data.get('tone', 'professional')
+    result = openai_client.draft_team_message(context, message_type, tone)
+    return jsonify(result)
+
+
+@app.route('/ai/openai/slack-message', methods=['POST'])
+def openai_slack_message():
+    """Draft a Slack message"""
+    data = request.json
+    context = data.get('context', '')
+    channel_type = data.get('channel_type', 'project')
+    result = openai_client.draft_slack_message(context, channel_type)
+    return jsonify(result)
+
+
+@app.route('/ai/openai/summarize-thread', methods=['POST'])
+def openai_summarize_thread():
+    """Summarize a conversation thread"""
+    data = request.json
+    messages = data.get('messages', [])
+    result = openai_client.summarize_thread(messages)
+    return jsonify(result)
+
+
+@app.route('/ai/openai/analyze-feedback', methods=['POST'])
+def openai_analyze_feedback():
+    """Analyze feedback and extract insights"""
+    data = request.json
+    feedback = data.get('feedback', '')
+    source = data.get('source', 'client')
+    result = openai_client.analyze_feedback(feedback, source)
+    return jsonify(result)
+
+
+# =============================================================================
+# PERPLEXITY ENDPOINTS
+# =============================================================================
+
+@app.route('/ai/perplexity/research', methods=['POST'])
+def perplexity_research():
+    """Research a topic with citations"""
+    data = request.json
+    topic = data.get('topic', '')
+    depth = data.get('depth', 'comprehensive')
+    result = perplexity_client.research_topic(topic, depth)
+    return jsonify(result)
+
+
+@app.route('/ai/perplexity/industry', methods=['POST'])
+def perplexity_industry():
+    """Research an industry"""
+    data = request.json
+    industry = data.get('industry', '')
+    focus_areas = data.get('focus_areas', [])
+    result = perplexity_client.research_industry(industry, focus_areas)
+    return jsonify(result)
+
+
+@app.route('/ai/perplexity/competitors', methods=['POST'])
+def perplexity_competitors():
+    """Research competitors"""
+    data = request.json
+    company = data.get('company', '')
+    competitors = data.get('competitors', [])
+    industry = data.get('industry', '')
+    result = perplexity_client.research_competitors(company, competitors, industry)
+    return jsonify(result)
+
+
+@app.route('/ai/perplexity/client-email', methods=['POST'])
+def perplexity_client_email():
+    """Draft client-facing email"""
+    data = request.json
+    context = data.get('context', '')
+    email_type = data.get('email_type', 'update')
+    client_name = data.get('client_name', '')
+    result = perplexity_client.draft_client_email(context, email_type, client_name)
+    return jsonify(result)
+
+
+@app.route('/ai/perplexity/market-data', methods=['POST'])
+def perplexity_market_data():
+    """Get market data and statistics"""
+    data = request.json
+    query = data.get('query', '')
+    result = perplexity_client.get_market_data(query)
+    return jsonify(result)
+
+
+# =============================================================================
+# NOTION ENDPOINTS
+# =============================================================================
+
+@app.route('/notion/project', methods=['POST'])
+def notion_create_project():
+    """Create a project page in Notion"""
+    data = request.json
+    database_id = data.get('database_id', '')
+    project_data = data.get('project_data', {})
+    result = notion_client.create_project_page(database_id, project_data)
+    return jsonify(result)
+
+
+@app.route('/notion/meeting-notes', methods=['POST'])
+def notion_meeting_notes():
+    """Create meeting notes in Notion"""
+    data = request.json
+    database_id = data.get('database_id', '')
+    meeting_data = data.get('meeting_data', {})
+    result = notion_client.create_meeting_notes(database_id, meeting_data)
+    return jsonify(result)
+
+
+@app.route('/notion/search', methods=['GET'])
+def notion_search():
+    """Search Notion workspace"""
+    query = request.args.get('query', '')
+    filter_type = request.args.get('filter_type', None)
+    result = notion_client.search(query, filter_type)
+    return jsonify(result)
+
+
+@app.route('/notion/database/query', methods=['POST'])
+def notion_query_database():
+    """Query a Notion database"""
+    data = request.json
+    database_id = data.get('database_id', '')
+    filters = data.get('filters', None)
+    sorts = data.get('sorts', None)
+    result = notion_client.query_database(database_id, filters, sorts)
+    return jsonify(result)
+
+
+@app.route('/notion/page/status', methods=['PATCH'])
+def notion_update_status():
+    """Update project status in Notion"""
+    data = request.json
+    page_id = data.get('page_id', '')
+    status = data.get('status', '')
+    notes = data.get('notes', '')
+    result = notion_client.update_project_status(page_id, status, notes)
+    return jsonify(result)
+
+
+# =============================================================================
+# GOOGLE WORKSPACE ENDPOINTS
+# =============================================================================
+
+@app.route('/google/drive/folder', methods=['POST'])
+def google_create_folder():
+    """Create a folder in Google Drive"""
+    data = request.json
+    name = data.get('name', '')
+    parent_id = data.get('parent_id', None)
+    result = google_client.create_folder(name, parent_id)
+    return jsonify(result)
+
+
+@app.route('/google/drive/project-structure', methods=['POST'])
+def google_create_project_structure():
+    """Create project folder structure in Google Drive"""
+    data = request.json
+    project_name = data.get('project_name', '')
+    parent_id = data.get('parent_id', None)
+    result = google_client.create_project_structure(project_name, parent_id)
+    return jsonify(result)
+
+
+@app.route('/google/drive/files', methods=['GET'])
+def google_list_files():
+    """List files in Google Drive folder"""
+    folder_id = request.args.get('folder_id', None)
+    file_type = request.args.get('file_type', None)
+    result = google_client.list_files(folder_id, file_type)
+    return jsonify(result)
+
+
+@app.route('/google/drive/share', methods=['POST'])
+def google_share_file():
+    """Share a file or folder"""
+    data = request.json
+    file_id = data.get('file_id', '')
+    email = data.get('email', '')
+    role = data.get('role', 'reader')
+    result = google_client.share_file(file_id, email, role)
+    return jsonify(result)
+
+
+@app.route('/google/docs/document', methods=['POST'])
+def google_create_document():
+    """Create a Google Doc"""
+    data = request.json
+    title = data.get('title', '')
+    folder_id = data.get('folder_id', None)
+    result = google_client.create_document(title, folder_id)
+    return jsonify(result)
+
+
+@app.route('/google/docs/deliverable', methods=['POST'])
+def google_create_deliverable():
+    """Create a formatted deliverable document"""
+    data = request.json
+    title = data.get('title', '')
+    content = data.get('content', {})
+    folder_id = data.get('folder_id', None)
+    result = google_client.create_deliverable_doc(title, content, folder_id)
     return jsonify(result)
 
 
@@ -373,7 +665,7 @@ def receive_project_status():
 
 if __name__ == '__main__':
     print("\n" + "="*50)
-    print("MWD Agent v1.1.0 starting on port 8080")
+    print("MWD Agent v2.0.0 starting on port 8080")
     print("="*50)
 
     config = check_config()
@@ -383,14 +675,19 @@ if __name__ == '__main__':
         print(f"  {icon} {service}: {status}")
 
     print("\nStrategy Endpoints:")
-    print("  POST /branding")
-    print("  POST /website")
-    print("  POST /social")
-    print("  POST /copywriting")
+    print("  POST /branding, /website, /social, /copywriting")
 
-    print("\nWebhook Endpoints (Invoice System):")
-    print("  POST /api/intake")
-    print("  POST /api/project/status")
+    print("\nAI Endpoints:")
+    print("  Gemini: /ai/gemini/meeting-notes, /summarize, /orchestrate")
+    print("  OpenAI: /ai/openai/team-message, /slack-message, /summarize-thread")
+    print("  Perplexity: /ai/perplexity/research, /competitors, /client-email")
+
+    print("\nIntegration Endpoints:")
+    print("  Notion: /notion/project, /meeting-notes, /search")
+    print("  Google: /google/drive/*, /google/docs/*")
+
+    print("\nWebhook Endpoints:")
+    print("  POST /api/intake, /api/project/status")
 
     print("\n" + "="*50 + "\n")
 
