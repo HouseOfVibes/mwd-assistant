@@ -16,6 +16,8 @@ from integrations.openai_client import OpenAIClient
 from integrations.perplexity import PerplexityClient
 from integrations.notion import NotionClient
 from integrations.google_workspace import GoogleWorkspaceClient
+from integrations.slack_bot import SlackBot
+import asyncio
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -37,6 +39,7 @@ perplexity_client = PerplexityClient()
 invoice_client = InvoiceSystemClient()
 notion_client = NotionClient()
 google_client = GoogleWorkspaceClient()
+slack_bot = SlackBot()
 
 # Configuration check
 def check_config():
@@ -51,8 +54,8 @@ def check_config():
         'invoice_system': 'configured' if invoice_client.is_configured() else 'optional',
         'notion': 'configured' if notion_client.is_configured() else 'optional',
         'google_workspace': 'configured' if google_client.is_configured() else 'optional',
-        'supabase': 'configured' if os.getenv('SUPABASE_URL') else 'optional',
-        'slack': 'configured' if os.getenv('SLACK_TOKEN') else 'optional'
+        'slack_bot': 'configured' if slack_bot.is_configured() else 'optional',
+        'supabase': 'configured' if os.getenv('SUPABASE_URL') else 'optional'
     }
     return config_status
 
@@ -160,7 +163,7 @@ def home():
     return jsonify({
         'status': 'running',
         'service': 'MWD Agent',
-        'version': '2.0.0',
+        'version': '2.1.0',
         'config': config,
         'endpoints': {
             'strategy': [
@@ -190,6 +193,10 @@ def home():
                 'POST /google/drive/project-structure',
                 'POST /google/docs/document',
                 'POST /google/docs/deliverable'
+            ],
+            'slack': [
+                'POST /slack/events',
+                'POST /slack/interact'
             ],
             'webhooks': [
                 'POST /api/intake',
@@ -485,6 +492,102 @@ def google_create_deliverable():
 
 
 # =============================================================================
+# SLACK BOT ENDPOINTS
+# =============================================================================
+
+@app.route('/slack/events', methods=['POST'])
+def slack_events():
+    """
+    Handle Slack Events API
+
+    This endpoint receives all Slack events (messages, mentions, etc.)
+    and routes them to the appropriate handler.
+    """
+    # Verify request signature
+    timestamp = request.headers.get('X-Slack-Request-Timestamp', '')
+    signature = request.headers.get('X-Slack-Signature', '')
+
+    if not slack_bot.verify_request(timestamp, signature, request.data):
+        return jsonify({'error': 'Invalid signature'}), 403
+
+    data = request.json
+
+    # Handle URL verification challenge
+    if data.get('type') == 'url_verification':
+        return jsonify({'challenge': data.get('challenge')})
+
+    # Handle events
+    event = data.get('event', {})
+    event_type = event.get('type')
+
+    # Ignore bot messages to prevent loops
+    if event.get('bot_id') or event.get('subtype') == 'bot_message':
+        return jsonify({'ok': True})
+
+    if event_type == 'app_mention' or event_type == 'message':
+        # Only process direct messages or mentions
+        channel_type = event.get('channel_type', '')
+        if event_type == 'message' and channel_type != 'im':
+            # In channels, only respond to mentions
+            if f'<@{slack_bot.bot_user_id}>' not in event.get('text', ''):
+                return jsonify({'ok': True})
+
+        channel_id = event.get('channel')
+        thread_ts = event.get('thread_ts')
+
+        # Process message asynchronously
+        async def process():
+            await slack_bot.handle_message(event, channel_id, thread_ts)
+
+        # Run async handler
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(process())
+        except Exception as e:
+            logger.error(f"Error processing Slack event: {e}")
+
+    return jsonify({'ok': True})
+
+
+@app.route('/slack/interact', methods=['POST'])
+def slack_interact():
+    """
+    Handle Slack interactive components
+
+    Buttons, menus, modals, etc.
+    """
+    # Verify request signature
+    timestamp = request.headers.get('X-Slack-Request-Timestamp', '')
+    signature = request.headers.get('X-Slack-Signature', '')
+
+    if not slack_bot.verify_request(timestamp, signature, request.data):
+        return jsonify({'error': 'Invalid signature'}), 403
+
+    # Parse payload (comes as form data)
+    import json
+    payload = json.loads(request.form.get('payload', '{}'))
+
+    action_type = payload.get('type')
+
+    if action_type == 'block_actions':
+        # Handle button clicks, menu selections
+        actions = payload.get('actions', [])
+        for action in actions:
+            action_id = action.get('action_id')
+            # Route to appropriate handler based on action_id
+            logger.info(f"Slack action: {action_id}")
+
+    elif action_type == 'view_submission':
+        # Handle modal submissions
+        view = payload.get('view', {})
+        callback_id = view.get('callback_id')
+        logger.info(f"Modal submission: {callback_id}")
+
+    return jsonify({'ok': True})
+
+
+# =============================================================================
 # WEBHOOK ENDPOINTS (Invoice System Integration)
 # =============================================================================
 
@@ -665,7 +768,7 @@ def receive_project_status():
 
 if __name__ == '__main__':
     print("\n" + "="*50)
-    print("MWD Agent v2.0.0 starting on port 8080")
+    print("MWD Agent v2.1.0 starting on port 8080")
     print("="*50)
 
     config = check_config()
@@ -685,6 +788,7 @@ if __name__ == '__main__':
     print("\nIntegration Endpoints:")
     print("  Notion: /notion/project, /meeting-notes, /search")
     print("  Google: /google/drive/*, /google/docs/*")
+    print("  Slack Bot: /slack/events, /slack/interact")
 
     print("\nWebhook Endpoints:")
     print("  POST /api/intake, /api/project/status")

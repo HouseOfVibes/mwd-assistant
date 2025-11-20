@@ -5,6 +5,7 @@ from .openai_client import OpenAIClient
 from .perplexity import PerplexityClient
 from .notion import NotionClient
 from .google_workspace import GoogleWorkspaceClient
+from .slack_bot import SlackBot
 
 __all__ = [
     'InvoiceSystemClient',
@@ -12,5 +13,6 @@ __all__ = [
     'OpenAIClient',
     'PerplexityClient',
     'NotionClient',
-    'GoogleWorkspaceClient'
+    'GoogleWorkspaceClient',
+    'SlackBot'
 ]
