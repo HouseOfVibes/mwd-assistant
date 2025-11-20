@@ -19,9 +19,9 @@ supabase>=2.24.0               # Supabase client (Nov 2025)
 # MCP (Model Context Protocol) - Multi-AI Coordination
 mcp[cli]>=1.21.0               # Official MCP Python SDK (Nov 2025)
 mcp-server-git>=2025.9.25      # Git repository integration
-# supabase-mcp-server>=0.4.0   # Requires Python 3.12+ (current: 3.11.14)
-                                # Use TypeScript version: npx -y supabase-mcp-server
-memory-mcp>=0.1.0              # Long-term memory storage
+# supabase-mcp-server>=0.4.0   # Requires Python 3.12+ (use TypeScript version)
+# memory-mcp                   # Only dev versions available (use TypeScript version)
+                               # Use: npx -y @modelcontextprotocol/server-memory
 
 # Note: google-generativeai is DEPRECATED - use google-genai instead
 # Support for google-generativeai ends November 30, 2025

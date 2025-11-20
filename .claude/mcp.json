@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "memory": {
-      "command": "uvx",
-      "args": ["memory-mcp"],
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
       "description": "Long-term memory storage for multi-AI coordination. Stores client context, project history, and brand guidelines."
     },
     "supabase": {
