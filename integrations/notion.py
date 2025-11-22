@@ -531,22 +531,22 @@ class NotionClient:
             # Create sub-pages based on services
             subpages_to_create = [
                 {
-                    'name': '📅 Timeline & Milestones',
+                    'name': 'Timeline & Milestones',
                     'emoji': '📅',
                     'content': self._get_timeline_content(services, client_data.get('project_timeline', ''))
                 },
                 {
-                    'name': '📦 Deliverables',
+                    'name': 'Deliverables',
                     'emoji': '📦',
                     'content': self._get_deliverables_content(services)
                 },
                 {
-                    'name': '💬 Communication Log',
+                    'name': 'Communication Log',
                     'emoji': '💬',
                     'content': self._get_communication_content()
                 },
                 {
-                    'name': '📁 Resources & Assets',
+                    'name': 'Resources & Assets',
                     'emoji': '📁',
                     'content': self._get_resources_content()
                 }
@@ -591,18 +591,18 @@ class NotionClient:
     def _format_service_name(self, service: str) -> str:
         """Format service name for display"""
         service_names = {
-            'branding': '🎨 Branding & Identity',
-            'website': '🌐 Website Design & Development',
-            'social': '📱 Social Media Strategy',
-            'copywriting': '✍️ Copywriting & Content',
-            'seo': '🔍 SEO & Analytics',
-            'email': '📧 Email Marketing',
-            'advertising': '📣 Advertising & PPC',
-            'video': '🎥 Video Production',
-            'photography': '📸 Photography',
-            'print': '🖨️ Print Design'
+            'branding': 'Branding & Identity',
+            'website': 'Website Design & Development',
+            'social': 'Social Media Strategy',
+            'copywriting': 'Copywriting & Content',
+            'seo': 'SEO & Analytics',
+            'email': 'Email Marketing',
+            'advertising': 'Advertising & PPC',
+            'video': 'Video Production',
+            'photography': 'Photography',
+            'print': 'Print Design'
         }
-        return service_names.get(service.lower(), f"📋 {service.title()}")
+        return service_names.get(service.lower(), service.title())
 
     def _get_timeline_content(self, services: List[str], timeline: str) -> List[Dict]:
         """Generate timeline page content"""
@@ -648,19 +648,19 @@ class NotionClient:
         # Add service-specific deliverable sections
         service_deliverables = {
             'branding': {
-                'title': '🎨 Branding Deliverables',
+                'title': 'Branding Deliverables',
                 'items': ['Brand Strategy Document', 'Logo Files (all formats)', 'Color Palette', 'Typography Guide', 'Brand Guidelines PDF']
             },
             'website': {
-                'title': '🌐 Website Deliverables',
+                'title': 'Website Deliverables',
                 'items': ['Sitemap', 'Wireframes', 'Design Mockups', 'Development Files', 'Launch Checklist']
             },
             'social': {
-                'title': '📱 Social Media Deliverables',
+                'title': 'Social Media Deliverables',
                 'items': ['Platform Strategy', 'Content Pillars', 'Content Calendar', 'Post Templates', 'Hashtag Strategy']
             },
             'copywriting': {
-                'title': '✍️ Copywriting Deliverables',
+                'title': 'Copywriting Deliverables',
                 'items': ['Website Copy', 'Taglines', 'Email Sequences', 'Social Captions', 'Marketing Materials']
             }
         }
@@ -670,7 +670,7 @@ class NotionClient:
             if service_key in service_deliverables:
                 deliverable = service_deliverables[service_key]
                 content.append({'type': 'heading_2', 'text': deliverable['title']})
-                content.append({'type': 'bulleted_list', 'items': [f"⬜ {item}" for item in deliverable['items']]})
+                content.append({'type': 'bulleted_list', 'items': deliverable['items']})
 
         if not services:
             content.append({'type': 'paragraph', 'text': 'Deliverables will be added based on selected services.'})
@@ -715,7 +715,7 @@ class NotionClient:
 
         service_configs = {
             'branding': {
-                'name': '🎨 Brand Strategy',
+                'name': 'Brand Strategy',
                 'emoji': '🎨',
                 'content': [
                     {'type': 'heading_1', 'text': 'Brand Strategy'},
@@ -732,7 +732,7 @@ class NotionClient:
                 ]
             },
             'website': {
-                'name': '🌐 Website Plan',
+                'name': 'Website Plan',
                 'emoji': '🌐',
                 'content': [
                     {'type': 'heading_1', 'text': 'Website Design Plan'},
@@ -749,7 +749,7 @@ class NotionClient:
                 ]
             },
             'social': {
-                'name': '📱 Social Strategy',
+                'name': 'Social Strategy',
                 'emoji': '📱',
                 'content': [
                     {'type': 'heading_1', 'text': 'Social Media Strategy'},
@@ -766,7 +766,7 @@ class NotionClient:
                 ]
             },
             'copywriting': {
-                'name': '✍️ Copy & Content',
+                'name': 'Copy & Content',
                 'emoji': '✍️',
                 'content': [
                     {'type': 'heading_1', 'text': 'Copywriting & Content'},
