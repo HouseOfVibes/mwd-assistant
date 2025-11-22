@@ -57,6 +57,10 @@ A comprehensive list of everything the MWD Agent can do.
 - Thread-aware context
 - Emoji status reactions
 - Conversation persistence
+- **Deadline Reminders** - Automated daily reminders for upcoming deadlines (9 AM)
+- **Activity Digests** - Daily (6 PM) and weekly (Friday 5 PM) summaries
+- **Quick Action Buttons** - Interactive menus for common tasks
+- **File Upload Handling** - Process documents, images, spreadsheets with suggested actions
 
 ### Notion
 - Create/manage project pages
@@ -122,7 +126,7 @@ A comprehensive list of everything the MWD Agent can do.
 | Perplexity | 5 | `/ai/perplexity/research`, `/industry`, `/competitors`, `/client-email`, `/market-data` |
 | Notion | 5 | `/notion/project`, `/meeting-notes`, `/search`, `/database/query`, `/page/status` |
 | Google | 6 | `/google/drive/folder`, `/project-structure`, `/files`, `/share`, `/docs/document`, `/deliverable` |
-| Slack | 2 | `/slack/events`, `/slack/interact` |
+| Slack | 5 | `/slack/events`, `/slack/interact`, `/slack/reminders`, `/slack/digest`, `/slack/quick-actions` |
 | Webhooks | 2 | `/api/intake`, `/api/project/status` |
 
 ---
@@ -148,3 +152,7 @@ The MWD Agent is a **multi-AI orchestration platform** that can:
 - Provide conversational AI assistance via Slack
 - Automate client onboarding workflows
 - Coordinate multiple AI models for complex tasks
+- **Send automated deadline reminders** (daily at 9 AM)
+- **Generate activity digests** (daily and weekly)
+- **Provide quick action buttons** for common tasks
+- **Process file uploads** with intelligent suggestions

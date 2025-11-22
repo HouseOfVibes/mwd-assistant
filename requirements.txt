@@ -16,6 +16,9 @@ notion-client>=2.7.0           # Notion API (Oct 2025)
 slack-sdk>=3.38.0              # Slack API (Oct 2025)
 supabase>=2.24.0               # Supabase client (Nov 2025)
 
+# Scheduling
+apscheduler>=3.10.4            # Background job scheduler for reminders/digests
+
 # Google Workspace APIs
 google-api-python-client>=2.150.0  # Google Drive, Docs, Gmail
 google-auth>=2.35.0                # Google authentication
