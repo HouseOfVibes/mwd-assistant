@@ -425,3 +425,368 @@ class NotionClient:
         except Exception as e:
             logger.error(f"Notion search error: {e}")
             return {'success': False, 'error': str(e)}
+
+    def create_client_portal(self, parent_page_id: str, client_data: Dict) -> Dict[str, Any]:
+        """
+        Create a comprehensive client portal in Notion
+
+        Args:
+            parent_page_id: Parent page ID where portal will be created
+            client_data: Client information including:
+                - company_name: Client company name
+                - contact_name: Primary contact
+                - contact_email: Contact email
+                - services: List of services (branding, website, social, copywriting, etc.)
+                - industry: Client industry
+                - project_timeline: Expected timeline
+                - budget: Project budget
+                - goals: Client goals/objectives
+
+        Returns:
+            Created portal info with page IDs
+        """
+        if not self.is_configured():
+            return {'success': False, 'error': 'Notion client not configured'}
+
+        try:
+            company_name = client_data.get('company_name', 'New Client')
+            services = client_data.get('services', [])
+            created_pages = []
+
+            # Create main portal page
+            main_page = self.client.pages.create(
+                parent={'page_id': parent_page_id},
+                properties={
+                    'title': [{'text': {'content': f"{company_name} - Client Portal"}}]
+                },
+                icon={'type': 'emoji', 'emoji': '🏢'},
+                cover={
+                    'type': 'external',
+                    'external': {'url': 'https://images.unsplash.com/photo-1557804506-669a67965ba0?w=1200'}
+                }
+            )
+            main_page_id = main_page['id']
+            created_pages.append({'name': 'Main Portal', 'id': main_page_id, 'url': main_page['url']})
+
+            # Add overview content to main page
+            overview_blocks = [
+                {
+                    'object': 'block',
+                    'type': 'callout',
+                    'callout': {
+                        'rich_text': [{'text': {'content': f"Welcome to your project portal, {company_name}! This is your central hub for all project information, deliverables, and communication."}}],
+                        'icon': {'type': 'emoji', 'emoji': '👋'}
+                    }
+                },
+                {
+                    'object': 'block',
+                    'type': 'heading_1',
+                    'heading_1': {
+                        'rich_text': [{'text': {'content': 'Project Overview'}}]
+                    }
+                },
+                {
+                    'object': 'block',
+                    'type': 'column_list',
+                    'column_list': {'children': []}
+                }
+            ]
+
+            # Add client details
+            details_blocks = [
+                {'type': 'heading_2', 'text': 'Client Details'},
+                {'type': 'paragraph', 'text': f"**Company:** {company_name}"},
+                {'type': 'paragraph', 'text': f"**Contact:** {client_data.get('contact_name', 'TBD')}"},
+                {'type': 'paragraph', 'text': f"**Email:** {client_data.get('contact_email', 'TBD')}"},
+                {'type': 'paragraph', 'text': f"**Industry:** {client_data.get('industry', 'TBD')}"},
+                {'type': 'divider'},
+                {'type': 'heading_2', 'text': 'Services'},
+            ]
+
+            # Add services list
+            if services:
+                details_blocks.append({
+                    'type': 'bulleted_list',
+                    'items': [self._format_service_name(s) for s in services]
+                })
+            else:
+                details_blocks.append({'type': 'paragraph', 'text': 'Services to be determined'})
+
+            # Add project info
+            details_blocks.extend([
+                {'type': 'divider'},
+                {'type': 'heading_2', 'text': 'Project Info'},
+                {'type': 'paragraph', 'text': f"**Timeline:** {client_data.get('project_timeline', 'TBD')}"},
+                {'type': 'paragraph', 'text': f"**Budget:** {client_data.get('budget', 'TBD')}"},
+            ])
+
+            if client_data.get('goals'):
+                details_blocks.extend([
+                    {'type': 'heading_2', 'text': 'Goals & Objectives'},
+                    {'type': 'paragraph', 'text': client_data.get('goals', '')}
+                ])
+
+            self.add_page_content(main_page_id, details_blocks)
+
+            # Create sub-pages based on services
+            subpages_to_create = [
+                {
+                    'name': '📅 Timeline & Milestones',
+                    'emoji': '📅',
+                    'content': self._get_timeline_content(services, client_data.get('project_timeline', ''))
+                },
+                {
+                    'name': '📦 Deliverables',
+                    'emoji': '📦',
+                    'content': self._get_deliverables_content(services)
+                },
+                {
+                    'name': '💬 Communication Log',
+                    'emoji': '💬',
+                    'content': self._get_communication_content()
+                },
+                {
+                    'name': '📁 Resources & Assets',
+                    'emoji': '📁',
+                    'content': self._get_resources_content()
+                }
+            ]
+
+            # Add service-specific pages
+            service_pages = self._get_service_pages(services)
+            subpages_to_create.extend(service_pages)
+
+            # Create all sub-pages
+            for subpage in subpages_to_create:
+                page = self.client.pages.create(
+                    parent={'page_id': main_page_id},
+                    properties={
+                        'title': [{'text': {'content': subpage['name']}}]
+                    },
+                    icon={'type': 'emoji', 'emoji': subpage.get('emoji', '📄')}
+                )
+
+                # Add content to the page
+                if subpage.get('content'):
+                    self.add_page_content(page['id'], subpage['content'])
+
+                created_pages.append({
+                    'name': subpage['name'],
+                    'id': page['id'],
+                    'url': page['url']
+                })
+
+            return {
+                'success': True,
+                'portal_id': main_page_id,
+                'portal_url': main_page['url'],
+                'pages_created': len(created_pages),
+                'pages': created_pages
+            }
+
+        except Exception as e:
+            logger.error(f"Notion create client portal error: {e}")
+            return {'success': False, 'error': str(e)}
+
+    def _format_service_name(self, service: str) -> str:
+        """Format service name for display"""
+        service_names = {
+            'branding': '🎨 Branding & Identity',
+            'website': '🌐 Website Design & Development',
+            'social': '📱 Social Media Strategy',
+            'copywriting': '✍️ Copywriting & Content',
+            'seo': '🔍 SEO & Analytics',
+            'email': '📧 Email Marketing',
+            'advertising': '📣 Advertising & PPC',
+            'video': '🎥 Video Production',
+            'photography': '📸 Photography',
+            'print': '🖨️ Print Design'
+        }
+        return service_names.get(service.lower(), f"📋 {service.title()}")
+
+    def _get_timeline_content(self, services: List[str], timeline: str) -> List[Dict]:
+        """Generate timeline page content"""
+        content = [
+            {'type': 'heading_1', 'text': 'Project Timeline'},
+            {'type': 'paragraph', 'text': f"Expected completion: {timeline}" if timeline else "Timeline to be determined"},
+            {'type': 'divider'},
+            {'type': 'heading_2', 'text': 'Milestones'},
+        ]
+
+        # Generate milestones based on services
+        milestones = ['Project Kickoff', 'Discovery & Research']
+
+        if 'branding' in [s.lower() for s in services]:
+            milestones.extend(['Brand Strategy Review', 'Brand Identity Delivery'])
+        if 'website' in [s.lower() for s in services]:
+            milestones.extend(['Wireframes & Sitemap', 'Design Mockups', 'Development', 'Website Launch'])
+        if 'social' in [s.lower() for s in services]:
+            milestones.extend(['Social Strategy Review', 'Content Calendar Delivery'])
+        if 'copywriting' in [s.lower() for s in services]:
+            milestones.extend(['Copy Draft Review', 'Final Copy Delivery'])
+
+        milestones.append('Project Completion')
+
+        # Add as to-do items
+        for milestone in milestones:
+            content.append({
+                'type': 'to_do',
+                'text': milestone,
+                'checked': False
+            })
+
+        return content
+
+    def _get_deliverables_content(self, services: List[str]) -> List[Dict]:
+        """Generate deliverables page content"""
+        content = [
+            {'type': 'heading_1', 'text': 'Project Deliverables'},
+            {'type': 'paragraph', 'text': 'All project deliverables will be uploaded here for your review and approval.'},
+            {'type': 'divider'},
+        ]
+
+        # Add service-specific deliverable sections
+        service_deliverables = {
+            'branding': {
+                'title': '🎨 Branding Deliverables',
+                'items': ['Brand Strategy Document', 'Logo Files (all formats)', 'Color Palette', 'Typography Guide', 'Brand Guidelines PDF']
+            },
+            'website': {
+                'title': '🌐 Website Deliverables',
+                'items': ['Sitemap', 'Wireframes', 'Design Mockups', 'Development Files', 'Launch Checklist']
+            },
+            'social': {
+                'title': '📱 Social Media Deliverables',
+                'items': ['Platform Strategy', 'Content Pillars', 'Content Calendar', 'Post Templates', 'Hashtag Strategy']
+            },
+            'copywriting': {
+                'title': '✍️ Copywriting Deliverables',
+                'items': ['Website Copy', 'Taglines', 'Email Sequences', 'Social Captions', 'Marketing Materials']
+            }
+        }
+
+        for service in services:
+            service_key = service.lower()
+            if service_key in service_deliverables:
+                deliverable = service_deliverables[service_key]
+                content.append({'type': 'heading_2', 'text': deliverable['title']})
+                content.append({'type': 'bulleted_list', 'items': [f"⬜ {item}" for item in deliverable['items']]})
+
+        if not services:
+            content.append({'type': 'paragraph', 'text': 'Deliverables will be added based on selected services.'})
+
+        return content
+
+    def _get_communication_content(self) -> List[Dict]:
+        """Generate communication log page content"""
+        return [
+            {'type': 'heading_1', 'text': 'Communication Log'},
+            {'type': 'paragraph', 'text': 'Record of all project communications, decisions, and updates.'},
+            {'type': 'divider'},
+            {'type': 'heading_2', 'text': 'Latest Updates'},
+            {'type': 'paragraph', 'text': f"**{datetime.now().strftime('%Y-%m-%d')}** - Client portal created. Welcome to your project!"},
+            {'type': 'divider'},
+            {'type': 'heading_2', 'text': 'Key Decisions'},
+            {'type': 'paragraph', 'text': 'Important decisions will be documented here.'},
+            {'type': 'divider'},
+            {'type': 'heading_2', 'text': 'Questions & Answers'},
+            {'type': 'paragraph', 'text': 'Questions and their resolutions will be tracked here.'}
+        ]
+
+    def _get_resources_content(self) -> List[Dict]:
+        """Generate resources page content"""
+        return [
+            {'type': 'heading_1', 'text': 'Resources & Assets'},
+            {'type': 'paragraph', 'text': 'Upload brand assets, reference materials, and other resources here.'},
+            {'type': 'divider'},
+            {'type': 'heading_2', 'text': 'Brand Assets'},
+            {'type': 'paragraph', 'text': 'Logos, images, and brand materials'},
+            {'type': 'divider'},
+            {'type': 'heading_2', 'text': 'Reference Materials'},
+            {'type': 'paragraph', 'text': 'Competitor examples, inspiration, and reference documents'},
+            {'type': 'divider'},
+            {'type': 'heading_2', 'text': 'Project Documents'},
+            {'type': 'paragraph', 'text': 'Contracts, briefs, and other project documentation'}
+        ]
+
+    def _get_service_pages(self, services: List[str]) -> List[Dict]:
+        """Generate service-specific sub-pages"""
+        pages = []
+
+        service_configs = {
+            'branding': {
+                'name': '🎨 Brand Strategy',
+                'emoji': '🎨',
+                'content': [
+                    {'type': 'heading_1', 'text': 'Brand Strategy'},
+                    {'type': 'paragraph', 'text': 'Your comprehensive brand strategy and identity guidelines.'},
+                    {'type': 'divider'},
+                    {'type': 'heading_2', 'text': 'Brand Positioning'},
+                    {'type': 'paragraph', 'text': 'To be completed...'},
+                    {'type': 'heading_2', 'text': 'Target Audience'},
+                    {'type': 'paragraph', 'text': 'To be completed...'},
+                    {'type': 'heading_2', 'text': 'Brand Personality'},
+                    {'type': 'paragraph', 'text': 'To be completed...'},
+                    {'type': 'heading_2', 'text': 'Visual Identity'},
+                    {'type': 'paragraph', 'text': 'To be completed...'}
+                ]
+            },
+            'website': {
+                'name': '🌐 Website Plan',
+                'emoji': '🌐',
+                'content': [
+                    {'type': 'heading_1', 'text': 'Website Design Plan'},
+                    {'type': 'paragraph', 'text': 'Your website strategy, sitemap, and design specifications.'},
+                    {'type': 'divider'},
+                    {'type': 'heading_2', 'text': 'Sitemap'},
+                    {'type': 'paragraph', 'text': 'To be completed...'},
+                    {'type': 'heading_2', 'text': 'Page Layouts'},
+                    {'type': 'paragraph', 'text': 'To be completed...'},
+                    {'type': 'heading_2', 'text': 'User Journey'},
+                    {'type': 'paragraph', 'text': 'To be completed...'},
+                    {'type': 'heading_2', 'text': 'Technical Requirements'},
+                    {'type': 'paragraph', 'text': 'To be completed...'}
+                ]
+            },
+            'social': {
+                'name': '📱 Social Strategy',
+                'emoji': '📱',
+                'content': [
+                    {'type': 'heading_1', 'text': 'Social Media Strategy'},
+                    {'type': 'paragraph', 'text': 'Your social media presence strategy and content plan.'},
+                    {'type': 'divider'},
+                    {'type': 'heading_2', 'text': 'Platform Strategy'},
+                    {'type': 'paragraph', 'text': 'To be completed...'},
+                    {'type': 'heading_2', 'text': 'Content Pillars'},
+                    {'type': 'paragraph', 'text': 'To be completed...'},
+                    {'type': 'heading_2', 'text': 'Posting Schedule'},
+                    {'type': 'paragraph', 'text': 'To be completed...'},
+                    {'type': 'heading_2', 'text': 'Content Calendar'},
+                    {'type': 'paragraph', 'text': 'To be completed...'}
+                ]
+            },
+            'copywriting': {
+                'name': '✍️ Copy & Content',
+                'emoji': '✍️',
+                'content': [
+                    {'type': 'heading_1', 'text': 'Copywriting & Content'},
+                    {'type': 'paragraph', 'text': 'All written content and messaging for your brand.'},
+                    {'type': 'divider'},
+                    {'type': 'heading_2', 'text': 'Messaging Framework'},
+                    {'type': 'paragraph', 'text': 'To be completed...'},
+                    {'type': 'heading_2', 'text': 'Website Copy'},
+                    {'type': 'paragraph', 'text': 'To be completed...'},
+                    {'type': 'heading_2', 'text': 'Marketing Copy'},
+                    {'type': 'paragraph', 'text': 'To be completed...'},
+                    {'type': 'heading_2', 'text': 'Email Sequences'},
+                    {'type': 'paragraph', 'text': 'To be completed...'}
+                ]
+            }
+        }
+
+        for service in services:
+            service_key = service.lower()
+            if service_key in service_configs:
+                pages.append(service_configs[service_key])
+
+        return pages

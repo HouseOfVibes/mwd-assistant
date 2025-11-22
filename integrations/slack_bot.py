@@ -191,6 +191,7 @@ You have access to these capabilities:
 8. MEETING_NOTES - Use Gemini for meeting transcripts
 9. NOTION - Create projects, meeting notes in Notion
 10. GOOGLE_DRIVE - Create folders, documents in Google Drive
+11. CLIENT_PORTAL - Create a comprehensive Notion client portal with service-specific pages, timeline, deliverables, and communication sections
 
 Based on the user's request, determine:
 1. What action(s) need to be taken
@@ -371,6 +372,22 @@ Analyze this request and provide your orchestration plan."""
                         )
                     else:
                         result = {'success': False, 'error': 'Unknown Drive operation'}
+
+                elif action_type == 'CLIENT_PORTAL':
+                    from integrations.notion import NotionClient
+                    client = NotionClient()
+                    parent_page_id = params.get('parent_page_id') or os.getenv('NOTION_PORTALS_PAGE', '')
+                    client_data = {
+                        'company_name': params.get('company_name', 'New Client'),
+                        'contact_name': params.get('contact_name', ''),
+                        'contact_email': params.get('contact_email', ''),
+                        'services': params.get('services', []),
+                        'industry': params.get('industry', ''),
+                        'project_timeline': params.get('project_timeline', ''),
+                        'budget': params.get('budget', ''),
+                        'goals': params.get('goals', '')
+                    }
+                    result = client.create_client_portal(parent_page_id, client_data)
 
                 else:
                     result = {'success': False, 'error': f'Unknown action: {action_type}'}

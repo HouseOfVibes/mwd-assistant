@@ -17,6 +17,7 @@ from integrations.perplexity import PerplexityClient
 from integrations.notion import NotionClient
 from integrations.google_workspace import GoogleWorkspaceClient
 from integrations.slack_bot import SlackBot
+from integrations.slack_features import SlackFeatures, setup_scheduler
 import asyncio
 
 # Configure logging
@@ -40,6 +41,17 @@ invoice_client = InvoiceSystemClient()
 notion_client = NotionClient()
 google_client = GoogleWorkspaceClient()
 slack_bot = SlackBot()
+
+# Initialize Slack features with required clients
+slack_features = SlackFeatures(
+    slack_client=slack_bot.client,
+    notion_client=notion_client,
+    gemini_client=gemini_client,
+    supabase_client=None  # Will be set if Supabase is configured
+)
+
+# Set up scheduler for automated tasks (reminders, digests)
+scheduler = setup_scheduler(slack_features)
 
 # Configuration check
 def check_config():
@@ -186,7 +198,8 @@ def home():
             'notion': [
                 'POST /notion/project',
                 'POST /notion/meeting-notes',
-                'GET /notion/search'
+                'GET /notion/search',
+                'POST /notion/client-portal'
             ],
             'google': [
                 'POST /google/drive/folder',
@@ -196,7 +209,10 @@ def home():
             ],
             'slack': [
                 'POST /slack/events',
-                'POST /slack/interact'
+                'POST /slack/interact',
+                'POST /slack/reminders',
+                'POST /slack/digest',
+                'POST /slack/quick-actions'
             ],
             'webhooks': [
                 'POST /api/intake',
@@ -426,6 +442,30 @@ def notion_update_status():
     return jsonify(result)
 
 
+@app.route('/notion/client-portal', methods=['POST'])
+def notion_client_portal():
+    """Create a comprehensive client portal in Notion"""
+    data = request.json
+    parent_page_id = data.get('parent_page_id', os.getenv('NOTION_PORTALS_PAGE', ''))
+
+    if not parent_page_id:
+        return jsonify({'success': False, 'error': 'parent_page_id is required or set NOTION_PORTALS_PAGE env var'}), 400
+
+    client_data = {
+        'company_name': data.get('company_name', 'New Client'),
+        'contact_name': data.get('contact_name', ''),
+        'contact_email': data.get('contact_email', ''),
+        'services': data.get('services', []),
+        'industry': data.get('industry', ''),
+        'project_timeline': data.get('project_timeline', ''),
+        'budget': data.get('budget', ''),
+        'goals': data.get('goals', '')
+    }
+
+    result = notion_client.create_client_portal(parent_page_id, client_data)
+    return jsonify(result)
+
+
 # =============================================================================
 # GOOGLE WORKSPACE ENDPOINTS
 # =============================================================================
@@ -535,17 +575,29 @@ def slack_events():
         channel_id = event.get('channel')
         thread_ts = event.get('thread_ts')
 
-        # Process message asynchronously
-        async def process():
-            await slack_bot.handle_message(event, channel_id, thread_ts)
+        # Check for file uploads
+        if event.get('files'):
+            async def process_files():
+                await slack_features.handle_file_upload(event, channel_id)
 
-        # Run async handler
-        try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(process())
-        except Exception as e:
-            logger.error(f"Error processing Slack event: {e}")
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(process_files())
+            except Exception as e:
+                logger.error(f"Error processing file upload: {e}")
+        else:
+            # Process message asynchronously
+            async def process():
+                await slack_bot.handle_message(event, channel_id, thread_ts)
+
+            # Run async handler
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(process())
+            except Exception as e:
+                logger.error(f"Error processing Slack event: {e}")
 
     return jsonify({'ok': True})
 
@@ -573,18 +625,178 @@ def slack_interact():
     if action_type == 'block_actions':
         # Handle button clicks, menu selections
         actions = payload.get('actions', [])
+        user_id = payload.get('user', {}).get('id', '')
+        channel = payload.get('channel', {}).get('id', '')
+        trigger_id = payload.get('trigger_id', '')
+
         for action in actions:
             action_id = action.get('action_id')
-            # Route to appropriate handler based on action_id
             logger.info(f"Slack action: {action_id}")
+
+            # Handle quick action buttons
+            if action_id.startswith('quick_'):
+                result = slack_features.handle_quick_action(
+                    action_id, user_id, channel, trigger_id
+                )
+                logger.info(f"Quick action result: {result}")
+
+            # Handle digest/reminder actions
+            elif action_id == 'check_deadlines':
+                slack_features.send_deadline_reminders(channel)
+            elif action_id == 'view_all_projects':
+                # Could open a modal or send a list
+                pass
+
+            # Handle file action buttons
+            elif action_id.startswith('file_summarize_'):
+                file_id = action.get('value')
+                # Trigger file summarization
+                logger.info(f"Summarize file: {file_id}")
+            elif action_id.startswith('file_keypoints_'):
+                file_id = action.get('value')
+                # Trigger key points extraction
+                logger.info(f"Extract key points from file: {file_id}")
 
     elif action_type == 'view_submission':
         # Handle modal submissions
         view = payload.get('view', {})
         callback_id = view.get('callback_id')
+        values = view.get('state', {}).get('values', {})
+        channel = view.get('private_metadata', '')
+
         logger.info(f"Modal submission: {callback_id}")
 
+        # Extract form values and call appropriate endpoint
+        if callback_id == 'modal_branding':
+            # Extract branding data and generate
+            client_data = {}
+            for block_id, block_values in values.items():
+                for input_id, input_data in block_values.items():
+                    value = input_data.get('value') or input_data.get('selected_option', {}).get('value')
+                    client_data[block_id] = value
+
+            result = call_claude(BRANDING_PROMPT, client_data)
+            if result.get('success') and channel:
+                slack_bot._send_message(
+                    channel,
+                    f"*Branding Strategy Generated* ✨\n\n{result.get('response', '')[:3000]}"
+                )
+
+        elif callback_id == 'modal_research':
+            # Extract research topic and call Perplexity
+            topic = ''
+            depth = 'comprehensive'
+            for block_id, block_values in values.items():
+                for input_id, input_data in block_values.items():
+                    if block_id == 'topic':
+                        topic = input_data.get('value', '')
+                    elif block_id == 'depth':
+                        depth = input_data.get('selected_option', {}).get('value', 'comprehensive')
+
+            result = perplexity_client.research_topic(topic, depth)
+            if result.get('success') and channel:
+                slack_bot._send_message(
+                    channel,
+                    f"*Research Results: {topic}* 🔍\n\n{result.get('response', '')[:3000]}"
+                )
+
+        elif callback_id == 'modal_project_folder':
+            # Create project folder in Google Drive
+            project_name = ''
+            for block_id, block_values in values.items():
+                for input_id, input_data in block_values.items():
+                    if block_id == 'project_name':
+                        project_name = input_data.get('value', '')
+
+            result = google_client.create_project_structure(project_name)
+            if result.get('success') and channel:
+                slack_bot._send_message(
+                    channel,
+                    f"*Project Folder Created* 📁\n\nProject: {project_name}\nFolder ID: {result.get('folder_id', 'N/A')}"
+                )
+
+        elif callback_id == 'modal_client_portal':
+            # Create client portal in Notion
+            client_data = {}
+            for block_id, block_values in values.items():
+                for input_id, input_data in block_values.items():
+                    value = input_data.get('value') or input_data.get('selected_option', {}).get('value', '')
+                    client_data[block_id] = value
+
+            # Parse services from comma-separated string
+            services_str = client_data.get('services', '')
+            services = [s.strip() for s in services_str.split(',') if s.strip()]
+
+            portal_data = {
+                'company_name': client_data.get('company_name', 'New Client'),
+                'contact_name': client_data.get('contact_name', ''),
+                'contact_email': client_data.get('contact_email', ''),
+                'industry': client_data.get('industry', ''),
+                'services': services,
+                'project_timeline': client_data.get('project_timeline', ''),
+                'goals': client_data.get('goals', '')
+            }
+
+            parent_page_id = os.getenv('NOTION_PORTALS_PAGE', '')
+            if parent_page_id:
+                result = notion_client.create_client_portal(parent_page_id, portal_data)
+                if result.get('success') and channel:
+                    slack_bot._send_message(
+                        channel,
+                        f"*Client Portal Created* 🏢\n\n"
+                        f"Company: {portal_data['company_name']}\n"
+                        f"Pages Created: {result.get('pages_created', 0)}\n"
+                        f"Portal URL: {result.get('portal_url', 'N/A')}"
+                    )
+                elif channel:
+                    slack_bot._send_message(
+                        channel,
+                        f"Failed to create portal: {result.get('error', 'Unknown error')}"
+                    )
+            elif channel:
+                slack_bot._send_message(
+                    channel,
+                    "NOTION_PORTALS_PAGE environment variable not set. Please configure it first."
+                )
+
     return jsonify({'ok': True})
+
+
+# =============================================================================
+# SLACK FEATURE ENDPOINTS (Reminders, Digests, Quick Actions)
+# =============================================================================
+
+@app.route('/slack/reminders', methods=['POST'])
+def slack_send_reminders():
+    """Manually trigger deadline reminders"""
+    data = request.json or {}
+    channel = data.get('channel', '')
+    result = slack_features.send_deadline_reminders(channel)
+    return jsonify(result)
+
+
+@app.route('/slack/digest', methods=['POST'])
+def slack_send_digest():
+    """Manually trigger activity digest"""
+    data = request.json or {}
+    channel = data.get('channel', '')
+    period = data.get('period', 'daily')
+    result = slack_features.send_digest(channel, period)
+    return jsonify(result)
+
+
+@app.route('/slack/quick-actions', methods=['POST'])
+def slack_quick_actions():
+    """Send quick actions menu to a channel"""
+    data = request.json or {}
+    channel = data.get('channel', '')
+    thread_ts = data.get('thread_ts')
+
+    if not channel:
+        return jsonify({'success': False, 'error': 'Channel is required'}), 400
+
+    result = slack_features.send_quick_actions_menu(channel, thread_ts)
+    return jsonify(result)
 
 
 # =============================================================================
