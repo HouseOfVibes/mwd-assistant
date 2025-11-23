@@ -1,6 +1,11 @@
 """
 OpenAI GPT Integration
-GPT-4o/GPT-4.1 - Internal team communication and collaboration
+GPT-5.1 - Internal team communication and collaboration
+
+GPT-5.1 Features (November 2025):
+- Adaptive Reasoning: Dynamically adjusts thinking based on task complexity
+- No Reasoning Mode: Faster responses for simple tasks
+- Extended Prompt Caching: Up to 24-hour cache retention
 """
 
 import os
@@ -23,7 +28,8 @@ class OpenAIClient:
     def __init__(self):
         self.api_key = os.getenv('OPENAI_API_KEY', '')
         self.client = None
-        self.model = 'gpt-4o'  # GPT-4o for team communication
+        self.model = 'gpt-5.1'  # GPT-5.1 for team communication (Nov 2025)
+        self.model_instant = 'gpt-5.1-instant'  # Faster variant for simple tasks
 
         if OPENAI_AVAILABLE and self.api_key:
             self.client = OpenAI(api_key=self.api_key)
@@ -135,8 +141,9 @@ Format the message using Slack markdown:
 Keep it concise and scannable."""
 
         try:
+            # Use instant model for simple drafting tasks
             response = self.client.chat.completions.create(
-                model=self.model,
+                model=self.model_instant,
                 messages=[
                     {"role": "system", "content": "You are a Slack communication expert. Create clear, well-formatted messages."},
                     {"role": "user", "content": prompt}
@@ -148,7 +155,7 @@ Keep it concise and scannable."""
             return {
                 'success': True,
                 'response': response.choices[0].message.content,
-                'model': self.model,
+                'model': self.model_instant,
                 'channel_type': channel_type
             }
         except Exception as e:

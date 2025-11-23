@@ -1,7 +1,7 @@
 # AI APIs
 anthropic>=0.73.0              # Claude Sonnet 4.5 - Strategic deliverables (Nov 2025)
-google-genai>=1.50.0           # Gemini 2.0 Flash - Primary workspace AI (Nov 2025)
-openai>=2.8.0                  # GPT-4o/GPT-4.1 - Internal team communication (Nov 2025)
+google-genai>=1.50.0           # Gemini 3 Pro - Primary workspace AI (Nov 2025)
+openai>=2.8.0                  # GPT-5.1 - Internal team communication (Nov 2025)
 perplexityai>=0.20.0           # Perplexity Sonar Pro - Client communication & research (2025)
 
 # Web Framework

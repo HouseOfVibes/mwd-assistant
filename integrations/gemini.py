@@ -1,6 +1,11 @@
 """
 Google Gemini AI Integration
-Gemini 2.0 Flash - Primary workspace AI for meeting notes and general tasks
+Gemini 3 Pro - Primary workspace AI for meeting notes and general tasks
+
+Gemini 3 Features (November 2025):
+- State-of-the-art reasoning capabilities
+- World-leading multimodal understanding
+- Agentic coding experiences
 """
 
 import os
@@ -25,7 +30,8 @@ class GeminiClient:
     def __init__(self):
         self.api_key = os.getenv('GEMINI_API_KEY', '')
         self.client = None
-        self.model = 'gemini-2.0-flash-exp'  # Latest Gemini 2.0 Flash
+        self.model = 'gemini-3-pro-preview'  # Gemini 3 Pro (Nov 2025)
+        self.model_flash = 'gemini-2.0-flash-exp'  # Fallback for simpler tasks
 
         if GENAI_AVAILABLE and self.api_key:
             self.client = genai.Client(api_key=self.api_key)

@@ -14,8 +14,8 @@ Your team's intelligent assistant for managing clients, projects, and creative w
 - **🔌 MCP Integration**: Model Context Protocol for standardized multi-AI coordination
 - **📦 Latest Dependencies**: All packages updated to November 2025 versions
   - Claude Sonnet 4.5 (anthropic 0.73.0)
-  - Gemini 2.0 Flash (google-genai 1.50.0)
-  - GPT-4o/4.1 (openai 2.8.0)
+  - Gemini 3 Pro (google-genai 1.50.0)
+  - GPT-5.1 (openai 2.8.0)
   - MCP SDK 1.21.0
 - **🧠 Persistent Memory**: Long-term memory storage across AI sessions
 - **🔧 7 MCP Servers**: Memory, Git, Supabase, Filesystem, GitHub, PostgreSQL, Sequential Thinking
@@ -138,8 +138,8 @@ GITHUB_TOKEN=your_github_personal_access_token_here
 | Package | Version | Model | Status |
 |---------|---------|-------|--------|
 | **anthropic** | >=0.73.0 | Claude Sonnet 4.5 | ✅ Active |
-| **google-genai** | >=1.50.0 | Gemini 2.0 Flash | ✅ Active |
-| **openai** | >=2.8.0 | GPT-4o / GPT-4.1 | ✅ Active |
+| **google-genai** | >=1.50.0 | Gemini 3 Pro | ✅ Active |
+| **openai** | >=2.8.0 | GPT-5.1 | ✅ Active |
 | **perplexityai** | >=0.20.0 | Sonar Pro | ✅ Active |
 | **mcp** | >=1.21.0 | MCP Protocol | ✅ Active |
 

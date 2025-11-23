@@ -301,7 +301,7 @@ Analyze this request and provide your orchestration plan."""
 
         try:
             response = self.gemini_client.models.generate_content(
-                model='gemini-2.0-flash-exp',
+                model='gemini-3-pro-preview',
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     temperature=0.3,
@@ -425,13 +425,13 @@ Subject: [subject line]
 [message body]"""
 
                         response = self.gemini_client.models.generate_content(
-                            model='gemini-2.0-flash-exp',
+                            model='gemini-3-pro-preview',
                             contents=prompt
                         )
                         result = {
                             'success': True,
                             'response': response.text,
-                            'model': 'gemini-2.0-flash-exp (fallback)',
+                            'model': 'gemini-3-pro-preview (fallback)',
                             'message_type': message_type
                         }
 
@@ -582,7 +582,7 @@ Generate a helpful, conversational response for the user that:
 Keep it concise but informative."""
 
         response = self.gemini_client.models.generate_content(
-            model='gemini-2.0-flash-exp',
+            model='gemini-3-pro-preview',
             contents=prompt,
             config=types.GenerateContentConfig(
                 temperature=0.7,
