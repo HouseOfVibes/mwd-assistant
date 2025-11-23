@@ -5,12 +5,13 @@ Handles branding, website design, social media, copywriting, and workspace manag
 """
 
 import os
+import hmac
+import hashlib
 import logging
 from datetime import datetime
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 from anthropic import Anthropic
-from integrations.invoice_system import InvoiceSystemClient
 from integrations.gemini import GeminiClient
 from integrations.openai_client import OpenAIClient
 from integrations.perplexity import PerplexityClient
@@ -37,7 +38,6 @@ openai_client = OpenAIClient()
 perplexity_client = PerplexityClient()
 
 # Initialize Integration clients
-invoice_client = InvoiceSystemClient()
 notion_client = NotionClient()
 google_client = GoogleWorkspaceClient()
 slack_bot = SlackBot()
@@ -63,11 +63,11 @@ def check_config():
         'openai': 'configured' if openai_client.is_configured() else 'optional',
         'perplexity': 'configured' if perplexity_client.is_configured() else 'optional',
         # Integrations
-        'invoice_system': 'configured' if invoice_client.is_configured() else 'optional',
         'notion': 'configured' if notion_client.is_configured() else 'optional',
         'google_workspace': 'configured' if google_client.is_configured() else 'optional',
         'slack_bot': 'configured' if slack_bot.is_configured() else 'optional',
-        'supabase': 'configured' if os.getenv('SUPABASE_URL') else 'optional'
+        'supabase': 'configured' if os.getenv('SUPABASE_URL') else 'optional',
+        'contact_webhook': 'configured' if os.getenv('CONTACT_WEBHOOK_SECRET') else 'optional'
     }
     return config_status
 
@@ -214,9 +214,8 @@ def home():
                 'POST /slack/digest',
                 'POST /slack/quick-actions'
             ],
-            'webhooks': [
-                'POST /api/intake',
-                'POST /api/project/status'
+            'contact': [
+                'POST /api/contact'
             ]
         }
     })
@@ -824,181 +823,149 @@ def slack_quick_actions():
 
 
 # =============================================================================
-# WEBHOOK ENDPOINTS (Invoice System Integration)
+# CONTACT FORM WEBHOOK ENDPOINT
 # =============================================================================
 
-@app.route('/api/intake', methods=['POST'])
-def receive_intake():
+def verify_webhook_signature(payload: bytes, signature: str) -> bool:
     """
-    Receive client intake from MWD Invoice System webhook
+    Verify HMAC-SHA256 signature from webhook
+
+    Args:
+        payload: Raw request body bytes
+        signature: Signature from X-Webhook-Signature header
+
+    Returns:
+        True if signature is valid, False otherwise
+    """
+    webhook_secret = os.getenv('CONTACT_WEBHOOK_SECRET', '')
+
+    if not webhook_secret:
+        logger.warning("Webhook secret not configured, skipping verification")
+        return True  # Skip verification if not configured
+
+    if not signature:
+        logger.error("No signature provided in webhook request")
+        return False
+
+    expected_signature = hmac.new(
+        webhook_secret.encode('utf-8'),
+        payload,
+        hashlib.sha256
+    ).hexdigest()
+
+    # Use constant-time comparison to prevent timing attacks
+    return hmac.compare_digest(signature, expected_signature)
+
+
+@app.route('/api/contact', methods=['POST'])
+def receive_contact():
+    """
+    Receive contact form submission from website
 
     Expected headers:
-        X-MWD-Signature: HMAC-SHA256 signature
-        X-MWD-Event-Type: client.intake.submitted
-        Authorization: Bearer <token>
+        X-Webhook-Signature: HMAC-SHA256 signature
+        Content-Type: application/json
 
     Expected payload:
         {
-            "event_type": "client.intake.submitted",
-            "event_id": "uuid",
-            "timestamp": "ISO8601",
-            "intake_data": { ... },
-            "invoice_system_metadata": { ... }
+            "company_name": "...",
+            "contact_name": "...",
+            "contact_email": "...",
+            "phone": "...",
+            "industry": "...",
+            "target_audience": "...",
+            "key_services": [...],
+            "brand_values": [...],
+            "project_goals": [...],
+            "budget": "...",
+            "timeline": "...",
+            "message": "..."
         }
     """
     # Verify webhook signature
-    signature = request.headers.get('X-MWD-Signature', '')
-    if not invoice_client.verify_webhook_signature(request.data, signature):
+    signature = request.headers.get('X-Webhook-Signature', '')
+    if not verify_webhook_signature(request.data, signature):
         logger.warning("Invalid webhook signature received")
         return jsonify({'error': 'Invalid signature'}), 403
 
     try:
-        data = request.json
-        event_type = data.get('event_type')
-        intake_data = data.get('intake_data', {})
-        metadata = data.get('invoice_system_metadata', {})
+        contact_data = request.json
 
-        logger.info(f"Received intake webhook: {event_type} for {intake_data.get('company_name')}")
+        logger.info(f"Received contact form: {contact_data.get('company_name')} - {contact_data.get('contact_email')}")
 
         # Generate AI deliverables
         workflows_triggered = []
         deliverables = {}
 
         # Generate branding strategy
-        branding_result = call_claude(BRANDING_PROMPT, intake_data)
+        branding_result = call_claude(BRANDING_PROMPT, contact_data)
         if branding_result.get('success'):
             deliverables['branding'] = branding_result
             workflows_triggered.append('branding')
 
         # Generate website plan
-        website_result = call_claude(WEBSITE_PROMPT, intake_data)
+        website_result = call_claude(WEBSITE_PROMPT, contact_data)
         if website_result.get('success'):
             deliverables['website'] = website_result
             workflows_triggered.append('website')
 
         # Generate social media strategy
-        social_result = call_claude(SOCIAL_PROMPT, intake_data)
+        social_result = call_claude(SOCIAL_PROMPT, contact_data)
         if social_result.get('success'):
             deliverables['social'] = social_result
             workflows_triggered.append('social')
 
         # Generate copywriting
-        copy_result = call_claude(COPYWRITING_PROMPT, intake_data)
+        copy_result = call_claude(COPYWRITING_PROMPT, contact_data)
         if copy_result.get('success'):
             deliverables['copywriting'] = copy_result
             workflows_triggered.append('copywriting')
 
-        # Create AI assessment
-        ai_assessment = {
-            'complexity_score': 7,  # Could be calculated based on services
+        # Create assessment
+        assessment = {
+            'complexity_score': 7,
             'estimated_hours': len(workflows_triggered) * 20,
-            'recommended_package': 'premium' if len(intake_data.get('key_services', [])) > 2 else 'standard',
-            'ai_generated_summary': f"Client {intake_data.get('company_name')} in {intake_data.get('industry')} seeking {', '.join(intake_data.get('key_services', []))}",
+            'recommended_package': 'premium' if len(contact_data.get('key_services', [])) > 2 else 'standard',
+            'summary': f"Client {contact_data.get('company_name')} in {contact_data.get('industry')} seeking {', '.join(contact_data.get('key_services', []))}",
             'deliverables_generated': workflows_triggered
         }
 
-        # Create lead in invoice system (if configured)
-        lead_response = {'success': False, 'lead_id': None}
-        if invoice_client.is_configured():
-            lead_response = invoice_client.create_lead(intake_data, ai_assessment)
+        # Notify via Slack if configured
+        if slack_bot.is_configured():
+            notification_channel = os.getenv('SLACK_NOTIFICATION_CHANNEL', '')
+            if notification_channel:
+                try:
+                    slack_bot._send_message(
+                        notification_channel,
+                        f"*New Contact Form Submission*\n\n"
+                        f"*Company:* {contact_data.get('company_name')}\n"
+                        f"*Contact:* {contact_data.get('contact_name')} ({contact_data.get('contact_email')})\n"
+                        f"*Industry:* {contact_data.get('industry')}\n"
+                        f"*Services:* {', '.join(contact_data.get('key_services', []))}\n"
+                        f"*Budget:* {contact_data.get('budget')}\n\n"
+                        f"*Deliverables Generated:* {len(deliverables)}"
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to send Slack notification: {e}")
 
-            # Attach deliverables to lead
-            if lead_response.get('success') and lead_response.get('lead_id'):
-                lead_id = lead_response['lead_id']
-                for deliverable_type, deliverable_data in deliverables.items():
-                    invoice_client.attach_deliverable(lead_id, {
-                        'deliverable_type': f'{deliverable_type}_strategy',
-                        'generated_at': datetime.utcnow().isoformat(),
-                        'ai_model': 'claude-sonnet-4.5',
-                        'content': deliverable_data.get('response'),
-                        'tokens_used': deliverable_data.get('usage', {})
-                    })
-
+        # Return response with generated deliverables
         return jsonify({
             'success': True,
-            'event_id': data.get('event_id'),
-            'lead_id': lead_response.get('lead_id'),
+            'message': 'Contact form processed successfully',
             'workflows_triggered': workflows_triggered,
             'deliverables_count': len(deliverables),
-            'ai_assessment': ai_assessment
-        })
-
-    except Exception as e:
-        logger.error(f"Error processing intake webhook: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/project/status', methods=['POST'])
-def receive_project_status():
-    """
-    Receive project status updates from MWD Invoice System webhook
-
-    Expected payload:
-        {
-            "event_type": "project.status.changed",
-            "event_id": "uuid",
-            "timestamp": "ISO8601",
-            "project_data": {
-                "project_id": "...",
-                "lead_id": "...",
-                "company_name": "...",
-                "old_status": "...",
-                "new_status": "...",
-                "payment_status": "...",
-                ...
+            'assessment': assessment,
+            'deliverables': {
+                key: {
+                    'content': value.get('response'),
+                    'usage': value.get('usage', {})
+                }
+                for key, value in deliverables.items()
             }
-        }
-    """
-    # Verify webhook signature
-    signature = request.headers.get('X-MWD-Signature', '')
-    if not invoice_client.verify_webhook_signature(request.data, signature):
-        logger.warning("Invalid webhook signature received for project status")
-        return jsonify({'error': 'Invalid signature'}), 403
-
-    try:
-        data = request.json
-        event_type = data.get('event_type')
-        project_data = data.get('project_data', {})
-
-        logger.info(
-            f"Received project status webhook: {project_data.get('company_name')} "
-            f"{project_data.get('old_status')} -> {project_data.get('new_status')}"
-        )
-
-        # Handle different status transitions
-        new_status = project_data.get('new_status')
-        actions_taken = []
-
-        if new_status == 'contract_signed':
-            # Project officially started - could trigger additional workflows
-            actions_taken.append('project_kickoff_initialized')
-            logger.info(f"Contract signed for {project_data.get('company_name')}")
-
-        elif new_status == 'payment_received':
-            # Payment received - could unlock deliverables
-            actions_taken.append('payment_confirmed')
-            logger.info(f"Payment received for {project_data.get('company_name')}")
-
-        elif new_status == 'milestone_completed':
-            # Milestone completed - could trigger next phase
-            actions_taken.append('milestone_acknowledged')
-            logger.info(f"Milestone completed for {project_data.get('company_name')}")
-
-        elif new_status == 'project_completed':
-            # Project completed - archive and cleanup
-            actions_taken.append('project_archived')
-            logger.info(f"Project completed for {project_data.get('company_name')}")
-
-        return jsonify({
-            'success': True,
-            'event_id': data.get('event_id'),
-            'project_id': project_data.get('project_id'),
-            'new_status': new_status,
-            'actions_taken': actions_taken
         })
 
     except Exception as e:
-        logger.error(f"Error processing project status webhook: {e}")
+        logger.error(f"Error processing contact form: {e}")
         return jsonify({'error': str(e)}), 500
 
 
@@ -1026,8 +993,8 @@ if __name__ == '__main__':
     print("  Google: /google/drive/*, /google/docs/*")
     print("  Slack Bot: /slack/events, /slack/interact")
 
-    print("\nWebhook Endpoints:")
-    print("  POST /api/intake, /api/project/status")
+    print("\nContact Form Endpoint:")
+    print("  POST /api/contact")
 
     print("\n" + "="*50 + "\n")
 
