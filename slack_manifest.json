@@ -44,7 +44,7 @@
             {
                 "command": "/mwd-quick-actions",
                 "description": "Open the quick actions menu",
-                "usage_hint": "",
+                "usage_hint": "[optional: action name]",
                 "should_escape": false
             }
         ]
