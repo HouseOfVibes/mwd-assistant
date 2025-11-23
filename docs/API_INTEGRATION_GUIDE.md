@@ -388,7 +388,7 @@ from anthropic import Anthropic
 from openai import OpenAI
 from perplexity import Perplexity
 
-class MWDAgent:
+class MWDAssistant:
     def __init__(self):
         self.gemini = genai.Client(api_key=os.getenv('GEMINI_API_KEY'))
         self.claude = Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))

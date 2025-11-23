@@ -80,8 +80,8 @@ Your team's intelligent assistant for managing clients, projects, and creative w
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/HouseOfVibes/mwd-agent.git
-   cd mwd-agent
+   git clone https://github.com/HouseOfVibes/mwd-assistant.git
+   cd mwd-assistant
    ```
 
 2. **Create virtual environment**
@@ -185,7 +185,7 @@ python test_agent.py
 ## 📦 Project Structure
 
 ```
-mwd-agent/
+mwd-assistant/
 ├── .claude/
 │   ├── mcp.json         # MCP server configuration
 │   └── MCP_SETUP.md     # MCP setup and usage guide

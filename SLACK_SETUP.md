@@ -242,5 +242,5 @@ After setup is complete:
 ## Support
 
 For issues with this integration:
-- Check the [MWD Assistant Repository](https://github.com/HouseOfVibes/mwd-agent)
+- Check the [MWD Assistant Repository](https://github.com/HouseOfVibes/mwd-assistant)
 - Review the `integrations/slack_bot.py` and `integrations/slack_features.py` files

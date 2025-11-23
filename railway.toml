@@ -10,4 +10,4 @@ healthcheckPath = "/"
 healthcheckTimeout = 100
 
 [[services]]
-name = "mwd-agent"
+name = "mwd-assistant"

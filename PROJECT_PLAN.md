@@ -3,7 +3,7 @@
 
 **Version:** 1.0
 **Date:** November 15, 2025
-**Repository:** https://github.com/HouseOfVibes/mwd-agent
+**Repository:** https://github.com/HouseOfVibes/mwd-assistant
 
 ---
 
@@ -521,7 +521,7 @@ MW Design Studio
 
 ### Sprint 4 (Weeks 7-8): Slack Integration
 - 🔲 Slack bot setup
-- 🔲 Command interface (/mwd-agent commands)
+- 🔲 Command interface (/mwd-assistant commands)
 - 🔲 Notification system
 - 🔲 Client channel automation
 - 🔲 Approval workflows
@@ -569,7 +569,7 @@ npm i -g @railway/cli
 railway login
 
 # 3. Initialize project in your repo
-cd /path/to/mwd-agent
+cd /path/to/mwd-assistant
 railway init
 
 # 4. Add environment variables
@@ -597,7 +597,7 @@ restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 
 [[services]]
-name = "mwd-agent"
+name = "mwd-assistant"
 ```
 
 ### Environment Variables on Railway
@@ -718,7 +718,7 @@ Sprint 7:    20-40 hours (testing + deployment)
 
 ### Proposed Folder Structure
 ```
-mwd-agent/
+mwd-assistant/
 ├── .github/
 │   └── workflows/
 │       └── ci.yml

@@ -224,7 +224,7 @@ commits = client.call_tool("get_commit_history", {
 
 from mcp import Client
 
-class MWDAgentOrchestrator:
+class MWDAssistantOrchestrator:
     def __init__(self):
         self.memory = Client("memory")
         self.supabase = Client("supabase")
@@ -291,7 +291,7 @@ curl http://localhost:3000/health
 
 ```bash
 # Start git server for this repository
-uvx mcp-server-git --repository /home/user/mwd-agent
+uvx mcp-server-git --repository /home/user/mwd-assistant
 
 # Verify repository access
 # Server should respond to MCP protocol messages
@@ -381,7 +381,7 @@ Use connection pooling for high-volume queries:
 ## Support
 
 For issues or questions:
-- GitHub Issues: https://github.com/HouseOfVibes/mwd-agent/issues
+- GitHub Issues: https://github.com/HouseOfVibes/mwd-assistant/issues
 - MCP Discord: https://discord.gg/modelcontextprotocol
 - Anthropic Support: https://support.anthropic.com
 

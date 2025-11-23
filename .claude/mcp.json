@@ -19,16 +19,16 @@
       "args": [
         "mcp-server-git",
         "--repository",
-        "/home/user/mwd-agent"
+        "/home/user/mwd-assistant"
       ],
-      "description": "Git repository integration for mwd-agent codebase management."
+      "description": "Git repository integration for mwd-assistant codebase management."
     },
     "filesystem": {
       "command": "npx",
       "args": [
         "-y",
         "@modelcontextprotocol/server-filesystem",
-        "/home/user/mwd-agent"
+        "/home/user/mwd-assistant"
       ],
       "description": "Secure file operations for templates, brand assets, and deliverables."
     },

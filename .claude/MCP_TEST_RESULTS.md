@@ -43,7 +43,7 @@ All required packages installed and importable:
 
 **Test Command:**
 ```bash
-uvx mcp-server-git --repository /home/user/mwd-agent
+uvx mcp-server-git --repository /home/user/mwd-assistant
 ```
 
 **Status:** Server starts successfully and waits for MCP protocol messages
@@ -66,7 +66,7 @@ uvx mcp-server-git --repository /home/user/mwd-agent
 
 1. **memory** - Long-term memory storage for multi-AI coordination
 2. **supabase** - Supabase database integration (TypeScript version)
-3. **git** - Git repository integration for mwd-agent codebase
+3. **git** - Git repository integration for mwd-assistant codebase
 4. **filesystem** - Secure file operations for templates and assets
 5. **github** - GitHub integration for repository and issue management
 6. **postgres** - PostgreSQL database access
@@ -188,7 +188,7 @@ The following TypeScript-based servers are configured but require Node.js and np
 3. **Test TypeScript Servers**
    ```bash
    # Test filesystem server
-   npx -y @modelcontextprotocol/server-filesystem /home/user/mwd-agent --help
+   npx -y @modelcontextprotocol/server-filesystem /home/user/mwd-assistant --help
    ```
 
 4. **Integrate with Flask App**
@@ -233,5 +233,5 @@ The MWD Assistant now has:
 ---
 
 **Generated:** November 15, 2025
-**Test Script:** `/home/user/mwd-agent/test_mcp.py`
-**Configuration:** `/home/user/mwd-agent/.claude/mcp.json`
+**Test Script:** `/home/user/mwd-assistant/test_mcp.py`
+**Configuration:** `/home/user/mwd-assistant/.claude/mcp.json`

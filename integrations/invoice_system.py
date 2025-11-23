@@ -74,7 +74,7 @@ class InvoiceSystemClient:
             return {'success': False, 'error': 'Client not configured'}
 
         payload = {
-            'source': 'mwd_agent_intake',
+            'source': 'mwd_assistant_intake',
             'company_name': intake_data.get('company_name'),
             'contact_name': intake_data.get('contact_name'),
             'contact_email': intake_data.get('contact_email'),

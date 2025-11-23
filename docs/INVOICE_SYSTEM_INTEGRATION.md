@@ -23,7 +23,7 @@ The MWD Assistant and MWD Invoice System need to communicate in both directions:
 
 **When:** Client submits intake form
 **Trigger:** Form submission in invoice system
-**Destination:** `POST https://mwd-agent.railway.app/api/intake`
+**Destination:** `POST https://mwd-assistant.railway.app/api/intake`
 
 **Payload Schema:**
 ```json
@@ -67,7 +67,7 @@ Authorization: Bearer <shared_secret_token>
 
 **When:** Project status updates in invoice system
 **Trigger:** Status field changed (contract signed, payment received, etc.)
-**Destination:** `POST https://mwd-agent.railway.app/api/project/status`
+**Destination:** `POST https://mwd-assistant.railway.app/api/project/status`
 
 **Payload Schema:**
 ```json
@@ -99,7 +99,7 @@ Authorization: Bearer <shared_secret_token>
 **Request Payload (from Agent):**
 ```json
 {
-  "source": "mwd_agent_intake",
+  "source": "mwd_assistant_intake",
   "company_name": "TechFlow Solutions",
   "contact_name": "John Smith",
   "contact_email": "[email protected]",
@@ -260,7 +260,7 @@ Authorization: Bearer <shared_secret_token>
 
 1. **API Authentication Token**
    - Generate long-lived API token for Agent
-   - Include in all responses: `X-API-Key: mwd_agent_secret_token_abc123`
+   - Include in all responses: `X-API-Key: mwd_assistant_secret_token_abc123`
    - Store in Agent's `.env`: `MWD_INVOICE_SYSTEM_API_KEY`
 
 2. **Webhook Signature Verification**
@@ -282,13 +282,13 @@ Authorization: Bearer <shared_secret_token>
 
 ```json
 {
-  "mwd_agent_integration": {
+  "mwd_assistant_integration": {
     "enabled": true,
-    "agent_api_url": "https://mwd-agent.railway.app",
+    "agent_api_url": "https://mwd-assistant.railway.app",
     "agent_api_key": "<generate_secure_token>",
     "webhook_endpoints": {
-      "intake_submitted": "https://mwd-agent.railway.app/api/intake",
-      "project_status_changed": "https://mwd-agent.railway.app/api/project/status"
+      "intake_submitted": "https://mwd-assistant.railway.app/api/intake",
+      "project_status_changed": "https://mwd-assistant.railway.app/api/project/status"
     },
     "webhook_secret": "<generate_secure_secret>",
     "auto_create_leads": true,
@@ -307,7 +307,7 @@ Authorization: Bearer <shared_secret_token>
 
 **Purpose:** Accept intake data from invoice system webhook
 **Method:** `POST /api/intake`
-**URL:** `https://mwd-agent.railway.app/api/intake`
+**URL:** `https://mwd-assistant.railway.app/api/intake`
 
 **Implementation Needed:**
 ```python
@@ -401,7 +401,7 @@ class InvoiceSystemClient:
     def create_lead(self, intake_data: Dict, ai_assessment: Dict) -> Dict:
         """Create lead in invoice system"""
         payload = {
-            'source': 'mwd_agent_intake',
+            'source': 'mwd_assistant_intake',
             'company_name': intake_data['company_name'],
             'contact_name': intake_data.get('contact_name'),
             'contact_email': intake_data['contact_email'],
@@ -476,7 +476,7 @@ MWD_WEBHOOK_SECRET=shared_webhook_secret_for_hmac_verification
    ↓
 
 2. INVOICE SYSTEM SENDS WEBHOOK
-   POST https://mwd-agent.railway.app/api/intake
+   POST https://mwd-assistant.railway.app/api/intake
    Payload: { intake_data, invoice_metadata }
    ↓
 
@@ -516,7 +516,7 @@ MWD_WEBHOOK_SECRET=shared_webhook_secret_for_hmac_verification
    ↓
 
 9. INVOICE SYSTEM SENDS STATUS WEBHOOK
-   POST https://mwd-agent.railway.app/api/project/status
+   POST https://mwd-assistant.railway.app/api/project/status
    Payload: { new_status: "contract_signed", payment_received }
    ↓
 

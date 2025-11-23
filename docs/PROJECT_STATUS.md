@@ -158,7 +158,7 @@ MWD_WEBHOOK_SECRET
 ## Deployment
 
 **Platform:** Railway
-**URL:** https://mwd-agent.railway.app
+**URL:** https://mwd-assistant.railway.app
 **Branch:** main
 **Version:** 2.1.0
 
@@ -195,8 +195,8 @@ SLACK_SIGNING_SECRET=✓ configured
 
 1. **Fix Slack bot token** - Reinstall Slack app and get fresh xoxb- token
 2. **Run Supabase schema** - Execute docs/SUPABASE_SCHEMA.sql
-3. **Configure Slack Events URL** - Set to https://mwd-agent.railway.app/slack/events
-4. **Test conversational bot** - Message @mwd-agent in Slack
+3. **Configure Slack Events URL** - Set to https://mwd-assistant.railway.app/slack/events
+4. **Test conversational bot** - Message @mwd-assistant in Slack
 5. **Add production server** - Switch from Flask dev server to Gunicorn
 
 ---
