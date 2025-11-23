@@ -1,0 +1,98 @@
+{
+    "_metadata": {
+        "major_version": 1,
+        "minor_version": 1
+    },
+    "display_information": {
+        "name": "MWD Assistant",
+        "description": "AI-powered internal assistant for MW Design Studio",
+        "long_description": "Your team's intelligent assistant for managing clients, projects, and creative workflows. Chat naturally about branding strategy, website design, social media, copywriting, research, and project management. Integrates with Notion, Google Workspace, and multiple AI models including Claude, Gemini, and GPT-4.",
+        "background_color": "#1a1a2e"
+    },
+    "features": {
+        "app_home": {
+            "home_tab_enabled": true,
+            "messages_tab_enabled": true,
+            "messages_tab_read_only_enabled": false
+        },
+        "bot_user": {
+            "display_name": "MWD Assistant",
+            "always_online": true
+        },
+        "assistant_view": {
+            "assistant_description": "Your team's AI assistant for managing clients, projects, and creative workflows. Ask about branding strategy, research industries, draft emails, manage Notion workspace, and more. Can't access external websites directly or send emails without confirmation.",
+            "suggested_prompts": [
+                {
+                    "title": "Workspace overview",
+                    "message": "Give me an overview of our Notion workspace"
+                },
+                {
+                    "title": "Research an industry",
+                    "message": "Research the [industry] industry and identify key trends"
+                },
+                {
+                    "title": "Create branding strategy",
+                    "message": "Create a branding strategy for [client name]"
+                },
+                {
+                    "title": "Draft client email",
+                    "message": "Draft a client email for [project update/proposal/follow-up]"
+                }
+            ]
+        },
+        "slash_commands": [
+            {
+                "command": "/mwd-quick-actions",
+                "description": "Open the quick actions menu",
+                "usage_hint": "",
+                "should_escape": false
+            }
+        ]
+    },
+    "oauth_config": {
+        "scopes": {
+            "bot": [
+                "app_mentions:read",
+                "assistant:write",
+                "channels:history",
+                "channels:read",
+                "chat:write",
+                "chat:write.public",
+                "commands",
+                "files:read",
+                "files:write",
+                "groups:history",
+                "groups:read",
+                "im:history",
+                "im:read",
+                "im:write",
+                "reactions:read",
+                "reactions:write",
+                "users:read",
+                "users:read.email"
+            ]
+        }
+    },
+    "settings": {
+        "event_subscriptions": {
+            "request_url": "https://mwd-agent-production.up.railway.app/slack/events",
+            "bot_events": [
+                "app_home_opened",
+                "app_mention",
+                "assistant_thread_started",
+                "assistant_thread_context_changed",
+                "file_shared",
+                "message.channels",
+                "message.groups",
+                "message.im"
+            ]
+        },
+        "interactivity": {
+            "is_enabled": true,
+            "request_url": "https://mwd-agent-production.up.railway.app/slack/interact"
+        },
+        "org_deploy_enabled": false,
+        "socket_mode_enabled": false,
+        "token_rotation_enabled": false
+    }
+}
