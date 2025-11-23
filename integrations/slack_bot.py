@@ -189,7 +189,7 @@ You have access to these capabilities:
 6. TEAM_MESSAGE - Use GPT for internal team communications
 7. CLIENT_EMAIL - Use Perplexity for client-facing emails
 8. MEETING_NOTES - Use Gemini for meeting transcripts
-9. NOTION - Search, query, create projects, update status, create meeting notes in Notion
+9. NOTION - Workspace overview, search, query, create projects, update status, create meeting notes in Notion
 10. GOOGLE_DRIVE - Create folders, documents in Google Drive
 11. CLIENT_PORTAL - Create a comprehensive Notion client portal with service-specific pages, timeline, deliverables, and communication sections
 
@@ -378,6 +378,8 @@ Analyze this request and provide your orchestration plan."""
                             params.get('database_id') or os.getenv('NOTION_MEETINGS_DATABASE', ''),
                             params.get('meeting_data', {})
                         )
+                    elif operation == 'workspace_overview':
+                        result = client.workspace_overview()
                     else:
                         result = {'success': False, 'error': f'Unknown Notion operation: {operation}'}
 

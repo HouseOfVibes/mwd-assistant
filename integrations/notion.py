@@ -410,9 +410,25 @@ class NotionClient:
 
             results = []
             for item in response['results']:
+                # Extract title based on object type
+                title = ''
+                if item['object'] == 'page':
+                    props = item.get('properties', {})
+                    # Try common title property names
+                    for key in ['Name', 'Title', 'name', 'title']:
+                        if key in props:
+                            title_prop = props[key]
+                            if title_prop.get('title'):
+                                title = ''.join([t.get('plain_text', '') for t in title_prop['title']])
+                                break
+                elif item['object'] == 'database':
+                    title_list = item.get('title', [])
+                    title = ''.join([t.get('plain_text', '') for t in title_list])
+
                 results.append({
                     'id': item['id'],
                     'type': item['object'],
+                    'title': title,
                     'url': item.get('url', ''),
                     'created_time': item['created_time']
                 })
@@ -424,6 +440,66 @@ class NotionClient:
             }
         except Exception as e:
             logger.error(f"Notion search error: {e}")
+            return {'success': False, 'error': str(e)}
+
+    def workspace_overview(self) -> Dict[str, Any]:
+        """
+        Get a comprehensive overview of the entire Notion workspace
+
+        Returns:
+            Overview with all databases and pages
+        """
+        if not self.is_configured():
+            return {'success': False, 'error': 'Notion client not configured'}
+
+        try:
+            # Get all databases
+            db_response = self.client.search(filter={'property': 'object', 'value': 'database'})
+            databases = []
+            for db in db_response['results']:
+                title_list = db.get('title', [])
+                title = ''.join([t.get('plain_text', '') for t in title_list])
+                databases.append({
+                    'id': db['id'],
+                    'title': title or 'Untitled Database',
+                    'url': db.get('url', ''),
+                    'created_time': db['created_time'],
+                    'last_edited_time': db.get('last_edited_time', '')
+                })
+
+            # Get top-level pages (search with empty query, filter by page)
+            page_response = self.client.search(filter={'property': 'object', 'value': 'page'})
+            pages = []
+            for page in page_response['results']:
+                # Extract title
+                props = page.get('properties', {})
+                title = ''
+                for key in ['Name', 'Title', 'name', 'title']:
+                    if key in props:
+                        title_prop = props[key]
+                        if title_prop.get('title'):
+                            title = ''.join([t.get('plain_text', '') for t in title_prop['title']])
+                            break
+
+                pages.append({
+                    'id': page['id'],
+                    'title': title or 'Untitled',
+                    'url': page.get('url', ''),
+                    'created_time': page['created_time'],
+                    'last_edited_time': page.get('last_edited_time', ''),
+                    'parent_type': page.get('parent', {}).get('type', 'unknown')
+                })
+
+            return {
+                'success': True,
+                'databases': databases,
+                'database_count': len(databases),
+                'pages': pages,
+                'page_count': len(pages),
+                'total_items': len(databases) + len(pages)
+            }
+        except Exception as e:
+            logger.error(f"Notion workspace overview error: {e}")
             return {'success': False, 'error': str(e)}
 
     def create_client_portal(self, parent_page_id: str, client_data: Dict) -> Dict[str, Any]:
