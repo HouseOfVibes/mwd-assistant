@@ -1,5 +1,4 @@
 # MWD Assistant Integrations
-from .invoice_system import InvoiceSystemClient
 from .gemini import GeminiClient
 from .openai_client import OpenAIClient
 from .perplexity import PerplexityClient
@@ -8,7 +7,6 @@ from .google_workspace import GoogleWorkspaceClient
 from .slack_bot import SlackBot
 
 __all__ = [
-    'InvoiceSystemClient',
     'GeminiClient',
     'OpenAIClient',
     'PerplexityClient',
