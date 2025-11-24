@@ -47,7 +47,8 @@ slack_features = SlackFeatures(
     slack_client=slack_bot.client,
     notion_client=notion_client,
     gemini_client=gemini_client,
-    supabase_client=None  # Will be set if Supabase is configured
+    supabase_client=None,  # Will be set if Supabase is configured
+    google_client=google_client
 )
 
 # Set up scheduler for automated tasks (reminders, digests)
@@ -680,6 +681,19 @@ def slack_interact():
                 # Trigger key points extraction
                 logger.info(f"Extract key points from file: {file_id}")
 
+            # Handle Google Drive upload actions
+            elif action_id.startswith('drive_upload_type_') or action_id == 'drive_upload_other':
+                message_ts = payload.get('message', {}).get('ts', '')
+                result = slack_features.handle_drive_upload_action(
+                    action_id=action_id,
+                    action_value=action.get('value', ''),
+                    channel_id=channel,
+                    user_id=user_id,
+                    message_ts=message_ts,
+                    trigger_id=trigger_id
+                )
+                logger.info(f"Drive upload action result: {result}")
+
     elif action_type == 'view_submission':
         # Handle modal submissions
         view = payload.get('view', {})
@@ -781,6 +795,11 @@ def slack_interact():
                     channel,
                     "NOTION_PORTALS_PAGE environment variable not set. Please configure it first."
                 )
+
+        elif callback_id == 'modal_drive_upload_custom':
+            # Handle custom content type for Drive upload
+            result = slack_features.handle_custom_content_type_submission(view)
+            logger.info(f"Custom content type upload result: {result}")
 
     return jsonify({'ok': True})
 
