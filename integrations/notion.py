@@ -1026,7 +1026,8 @@ class NotionClient:
             slack_channel: Slack channel name (e.g., '#client-grace-church' or 'client-grace-church')
 
         Returns:
-            Client profile data including name, Drive folder ID, and content types
+            Client profile data including name and content types
+            (client folder is looked up by name in Google Drive)
         """
         if not self.is_configured():
             return {'success': False, 'error': 'Notion client not configured'}
@@ -1063,15 +1064,6 @@ class NotionClient:
             # Extract client name (title)
             client_name = page.get('title', 'Unknown Client')
 
-            # Extract Drive Folder ID
-            drive_folder_prop = props.get('Drive Folder ID', {})
-            drive_folder_id = ''
-            if drive_folder_prop.get('rich_text'):
-                drive_folder_id = ''.join([
-                    t.get('plain_text', '')
-                    for t in drive_folder_prop['rich_text']
-                ])
-
             # Extract Content Types (multi-select)
             content_types_prop = props.get('Content Types', {})
             content_types = []
@@ -1094,7 +1086,6 @@ class NotionClient:
                 'success': True,
                 'client_name': client_name,
                 'slack_channel': stored_channel,
-                'drive_folder_id': drive_folder_id,
                 'content_types': content_types,
                 'page_id': page.get('id'),
                 'page_url': page.get('url')

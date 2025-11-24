@@ -828,7 +828,6 @@ class SlackFeatures:
         file_data = json.dumps({
             'file_ids': file_ids,
             'client_name': client_name,
-            'drive_folder_id': client_profile.get('drive_folder_id', ''),
             'channel_id': channel_id
         })
 
@@ -1170,8 +1169,11 @@ class SlackFeatures:
         """
         Execute the actual upload to Google Drive
 
+        Finds or creates client folder by name in the main Client Folders,
+        then creates dated content folder inside.
+
         Args:
-            file_data: Dict with file_ids, client_name, drive_folder_id
+            file_data: Dict with file_ids, client_name
             content_type: The content type/description
             channel_id: Channel to post confirmation
             message_ts: Optional message to update
@@ -1184,18 +1186,34 @@ class SlackFeatures:
 
         file_ids = file_data.get('file_ids', [])
         client_name = file_data.get('client_name', 'Unknown')
-        drive_folder_id = file_data.get('drive_folder_id', '')
 
         if not file_ids:
             return {'success': False, 'error': 'No files to upload'}
+
+        if not self.client_folders_id:
+            return {'success': False, 'error': 'Client folders ID not configured'}
 
         # Create date folder name
         today = datetime.now().strftime('%Y-%m-%d')
         folder_name = f"{today} - {content_type}"
 
         try:
-            # Smart upload: Check if folder already exists for this content type today
-            existing_folder = self.google.find_folder_by_name(folder_name, drive_folder_id)
+            # Step 1: Find or create client folder by name in Client Folders
+            client_folder = self.google.find_folder_by_name(client_name, self.client_folders_id)
+
+            if client_folder.get('success'):
+                client_folder_id = client_folder.get('folder_id')
+                logger.info(f"Found existing client folder: {client_name}")
+            else:
+                # Create client folder
+                client_folder_result = self.google.create_folder(client_name, self.client_folders_id)
+                if not client_folder_result.get('success'):
+                    raise Exception(f"Failed to create client folder: {client_folder_result.get('error')}")
+                client_folder_id = client_folder_result.get('folder_id')
+                logger.info(f"Created new client folder: {client_name}")
+
+            # Step 2: Find or create dated content folder inside client folder
+            existing_folder = self.google.find_folder_by_name(folder_name, client_folder_id)
 
             if existing_folder.get('success'):
                 # Use existing folder
@@ -1204,7 +1222,7 @@ class SlackFeatures:
                 logger.info(f"Using existing folder: {folder_name}")
             else:
                 # Create new folder
-                folder_result = self.google.create_folder(folder_name, drive_folder_id)
+                folder_result = self.google.create_folder(folder_name, client_folder_id)
                 if not folder_result.get('success'):
                     raise Exception(f"Failed to create folder: {folder_result.get('error')}")
 
