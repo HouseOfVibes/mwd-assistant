@@ -4,6 +4,7 @@ Google Drive, Docs, Gmail for file management and communication
 """
 
 import os
+import io
 import logging
 from typing import Dict, Any, List, Optional
 
@@ -237,6 +238,149 @@ class GoogleWorkspaceClient:
         except Exception as e:
             logger.error(f"Google Drive share error: {e}")
             return {'success': False, 'error': str(e)}
+
+    def find_folder_by_name(self, folder_name: str, parent_id: str = None) -> Dict[str, Any]:
+        """
+        Find a folder by name in Google Drive
+
+        Args:
+            folder_name: Name of the folder to find
+            parent_id: Optional parent folder ID to search within
+
+        Returns:
+            Folder info if found
+        """
+        if not self.is_configured():
+            return {'success': False, 'error': 'Google Workspace client not configured'}
+
+        try:
+            query_parts = [
+                f"name='{folder_name}'",
+                "mimeType='application/vnd.google-apps.folder'",
+                "trashed=false"
+            ]
+
+            if parent_id:
+                query_parts.append(f"'{parent_id}' in parents")
+
+            query = ' and '.join(query_parts)
+
+            results = self.drive_service.files().list(
+                q=query,
+                pageSize=10,
+                fields="files(id, name, webViewLink)"
+            ).execute()
+
+            files = results.get('files', [])
+
+            if files:
+                folder = files[0]
+                return {
+                    'success': True,
+                    'folder_id': folder['id'],
+                    'name': folder['name'],
+                    'url': folder.get('webViewLink', '')
+                }
+            else:
+                return {
+                    'success': False,
+                    'error': f"Folder '{folder_name}' not found"
+                }
+        except Exception as e:
+            logger.error(f"Google Drive find folder error: {e}")
+            return {'success': False, 'error': str(e)}
+
+    def upload_file(self, file_content: bytes, file_name: str,
+                    mime_type: str, folder_id: str = None) -> Dict[str, Any]:
+        """
+        Upload a file to Google Drive
+
+        Args:
+            file_content: File content as bytes
+            file_name: Name for the file
+            mime_type: MIME type of the file
+            folder_id: Folder to upload to
+
+        Returns:
+            Uploaded file info
+        """
+        if not self.is_configured():
+            return {'success': False, 'error': 'Google Workspace client not configured'}
+
+        try:
+            file_metadata = {'name': file_name}
+
+            if folder_id:
+                file_metadata['parents'] = [folder_id]
+
+            # Create media upload from bytes
+            media = MediaFileUpload(
+                io.BytesIO(file_content),
+                mimetype=mime_type,
+                resumable=True
+            )
+
+            # For MediaFileUpload with BytesIO, we need to use MediaIoBaseUpload instead
+            from googleapiclient.http import MediaIoBaseUpload
+            media = MediaIoBaseUpload(
+                io.BytesIO(file_content),
+                mimetype=mime_type,
+                resumable=True
+            )
+
+            file = self.drive_service.files().create(
+                body=file_metadata,
+                media_body=media,
+                fields='id, name, webViewLink, webContentLink'
+            ).execute()
+
+            return {
+                'success': True,
+                'file_id': file['id'],
+                'name': file['name'],
+                'url': file.get('webViewLink', ''),
+                'download_url': file.get('webContentLink', '')
+            }
+        except Exception as e:
+            logger.error(f"Google Drive upload error: {e}")
+            return {'success': False, 'error': str(e)}
+
+    def upload_files_batch(self, files: List[Dict], folder_id: str) -> Dict[str, Any]:
+        """
+        Upload multiple files to Google Drive
+
+        Args:
+            files: List of dicts with 'content', 'name', 'mime_type'
+            folder_id: Folder to upload to
+
+        Returns:
+            Results for all uploads
+        """
+        if not self.is_configured():
+            return {'success': False, 'error': 'Google Workspace client not configured'}
+
+        results = []
+        for file_data in files:
+            result = self.upload_file(
+                file_content=file_data['content'],
+                file_name=file_data['name'],
+                mime_type=file_data['mime_type'],
+                folder_id=folder_id
+            )
+            results.append({
+                'name': file_data['name'],
+                **result
+            })
+
+        successful = sum(1 for r in results if r.get('success'))
+
+        return {
+            'success': successful == len(files),
+            'total': len(files),
+            'successful': successful,
+            'failed': len(files) - successful,
+            'results': results
+        }
 
     # ==========================================================================
     # GOOGLE DOCS

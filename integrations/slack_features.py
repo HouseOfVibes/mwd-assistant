@@ -7,7 +7,9 @@ Slack Quick Win Features
 """
 
 import os
+import json
 import logging
+import requests
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 
@@ -25,13 +27,16 @@ class SlackFeatures:
     """Extended Slack features for MWD Assistant"""
 
     def __init__(self, slack_client: WebClient = None, notion_client=None,
-                 gemini_client=None, supabase_client=None):
+                 gemini_client=None, supabase_client=None, google_client=None):
         self.client = slack_client
         self.notion = notion_client
         self.gemini = gemini_client
         self.supabase = supabase_client
+        self.google = google_client
         self.reminder_channel = os.getenv('SLACK_REMINDER_CHANNEL', '')
         self.digest_channel = os.getenv('SLACK_DIGEST_CHANNEL', '')
+        self.client_profiles_db = os.getenv('NOTION_CLIENT_PROFILES_DB', '')
+        self.client_folders_id = os.getenv('GOOGLE_CLIENT_FOLDERS_ID', '1NFZ6HxW8piSyV6g7gHG_C7xaKJgxyXTP')
 
     # =========================================================================
     # 1. DEADLINE REMINDERS
@@ -707,15 +712,53 @@ class SlackFeatures:
             return {'success': False, 'error': str(e)}
 
     # =========================================================================
-    # 4. FILE UPLOAD HANDLING
+    # 4. FILE UPLOAD HANDLING & GOOGLE DRIVE INTEGRATION
     # =========================================================================
+
+    def get_channel_name(self, channel_id: str) -> str:
+        """Get channel name from channel ID"""
+        if not self.client:
+            return ''
+        try:
+            result = self.client.conversations_info(channel=channel_id)
+            return result.get('channel', {}).get('name', '')
+        except SlackApiError as e:
+            logger.error(f"Error getting channel info: {e}")
+            return ''
+
+    def download_slack_file(self, file_url: str) -> Optional[bytes]:
+        """
+        Download a file from Slack
+
+        Args:
+            file_url: The url_private from file info
+
+        Returns:
+            File content as bytes or None if failed
+        """
+        if not self.client:
+            return None
+
+        try:
+            token = os.getenv('SLACK_BOT_TOKEN', '')
+            headers = {'Authorization': f'Bearer {token}'}
+            response = requests.get(file_url, headers=headers)
+
+            if response.status_code == 200:
+                return response.content
+            else:
+                logger.error(f"Failed to download file: {response.status_code}")
+                return None
+        except Exception as e:
+            logger.error(f"Error downloading Slack file: {e}")
+            return None
 
     async def handle_file_upload(self, event: Dict, channel_id: str) -> Dict[str, Any]:
         """
-        Handle file uploads in Slack
+        Handle file uploads in Slack with Google Drive integration
 
-        Processes uploaded files (documents, images, etc.) and performs
-        appropriate actions based on file type.
+        For images/videos in client channels, prompts for content type
+        and uploads to Google Drive.
 
         Args:
             event: Slack event containing file info
@@ -731,92 +774,213 @@ class SlackFeatures:
         if not files:
             return {'success': False, 'error': 'No files in event'}
 
+        # Get channel name to check if it's a client channel
+        channel_name = self.get_channel_name(channel_id)
+        logger.info(f"File upload in channel: {channel_name}")
+
+        # Check if this is a client channel with Drive integration
+        client_profile = None
+        if self.notion and self.client_profiles_db and channel_name:
+            client_profile = self.notion.get_client_profile_by_channel(
+                self.client_profiles_db,
+                channel_name
+            )
+            if client_profile.get('success'):
+                logger.info(f"Found client profile: {client_profile.get('client_name')}")
+
+        # Filter for media files (images/videos)
+        media_files = [
+            f for f in files
+            if f.get('filetype', '') in ['png', 'jpg', 'jpeg', 'gif', 'webp', 'mp4', 'mov', 'webm', 'm4v']
+        ]
+
+        # If we have a client profile and media files, use Drive upload flow
+        if client_profile and client_profile.get('success') and media_files:
+            return await self._handle_drive_upload_flow(
+                event, channel_id, media_files, client_profile
+            )
+
+        # Otherwise, use the standard file handling flow
+        return await self._handle_standard_file_upload(event, channel_id, files)
+
+    async def _handle_drive_upload_flow(self, event: Dict, channel_id: str,
+                                        files: List[Dict], client_profile: Dict) -> Dict[str, Any]:
+        """
+        Handle file upload flow with Google Drive integration
+
+        Args:
+            event: Slack event
+            channel_id: Channel ID
+            files: List of media files
+            client_profile: Client profile from Notion
+
+        Returns:
+            Result of processing
+        """
+        client_name = client_profile.get('client_name', 'Unknown')
+        content_types = client_profile.get('content_types', [])
+        file_count = len(files)
+        file_type = 'image' if files[0].get('filetype') in ['png', 'jpg', 'jpeg', 'gif', 'webp'] else 'video'
+        file_word = f"{file_count} {file_type}{'s' if file_count > 1 else ''}"
+
+        # Build file IDs list for the action value
+        file_ids = [f.get('id') for f in files]
+        file_data = json.dumps({
+            'file_ids': file_ids,
+            'client_name': client_name,
+            'drive_folder_id': client_profile.get('drive_folder_id', ''),
+            'channel_id': channel_id
+        })
+
+        # Build content type buttons
+        blocks = [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"📸 Got {file_word} for *{client_name}*. What type of content?"
+                }
+            }
+        ]
+
+        # Create buttons for content types (max 5 per row)
+        if content_types:
+            button_elements = []
+            for i, content_type in enumerate(content_types[:10]):  # Max 10 options
+                button_elements.append({
+                    "type": "button",
+                    "text": {
+                        "type": "plain_text",
+                        "text": content_type[:24],  # Slack limit
+                        "emoji": True
+                    },
+                    "action_id": f"drive_upload_type_{i}",
+                    "value": json.dumps({
+                        'content_type': content_type,
+                        'file_data': file_data
+                    })
+                })
+
+                # Add row every 5 buttons
+                if len(button_elements) == 5:
+                    blocks.append({
+                        "type": "actions",
+                        "elements": button_elements
+                    })
+                    button_elements = []
+
+            # Add remaining buttons
+            if button_elements:
+                blocks.append({
+                    "type": "actions",
+                    "elements": button_elements
+                })
+
+        # Add "Other" option
+        blocks.append({
+            "type": "actions",
+            "elements": [
+                {
+                    "type": "button",
+                    "text": {
+                        "type": "plain_text",
+                        "text": "Other...",
+                        "emoji": True
+                    },
+                    "action_id": "drive_upload_other",
+                    "value": file_data
+                }
+            ]
+        })
+
+        try:
+            message_ts = event.get('ts', '')
+            thread_ts = event.get('thread_ts', message_ts)
+
+            self.client.chat_postMessage(
+                channel=channel_id,
+                blocks=blocks,
+                text=f"Got {file_word} for {client_name}. What type of content?",
+                thread_ts=thread_ts
+            )
+
+            return {
+                'success': True,
+                'action': 'drive_upload_prompt',
+                'files_count': len(files),
+                'client': client_name
+            }
+
+        except SlackApiError as e:
+            logger.error(f"Error sending Drive upload prompt: {e}")
+            return {'success': False, 'error': str(e)}
+
+    async def _handle_standard_file_upload(self, event: Dict, channel_id: str,
+                                           files: List[Dict]) -> Dict[str, Any]:
+        """
+        Handle standard file upload flow (non-Drive)
+
+        Args:
+            event: Slack event
+            channel_id: Channel ID
+            files: List of files
+
+        Returns:
+            Result of processing
+        """
         results = []
 
         for file_info in files:
             file_id = file_info.get('id')
             file_name = file_info.get('name', 'unknown')
             file_type = file_info.get('filetype', '')
-            mimetype = file_info.get('mimetype', '')
 
             logger.info(f"Processing uploaded file: {file_name} ({file_type})")
 
-            # Determine action based on file type
-            action_taken = None
-            response_text = None
-
-            # Document types - offer to summarize
+            # Determine response based on file type
             if file_type in ['pdf', 'doc', 'docx', 'txt', 'md']:
-                action_taken = 'document_uploaded'
                 response_text = (
                     f"📄 I received *{file_name}*\n\n"
                     "I can help you with this document. Would you like me to:\n"
                     "• Summarize the content\n"
                     "• Extract key points\n"
                     "• Generate meeting notes (if it's a transcript)\n\n"
-                    "_Reply with what you'd like me to do, or just ask a question about the document._"
+                    "_Reply with what you'd like me to do._"
                 )
-
-            # Spreadsheet types - offer analysis
             elif file_type in ['csv', 'xlsx', 'xls']:
-                action_taken = 'spreadsheet_uploaded'
                 response_text = (
                     f"📊 I received *{file_name}*\n\n"
-                    "I can help analyze this data. Would you like me to:\n"
-                    "• Summarize the data\n"
-                    "• Identify trends or patterns\n"
-                    "• Create a report\n\n"
-                    "_Tell me what insights you're looking for._"
+                    "I can help analyze this data. Tell me what insights you're looking for."
                 )
-
-            # Image types - acknowledge and offer actions
             elif file_type in ['png', 'jpg', 'jpeg', 'gif', 'webp']:
-                action_taken = 'image_uploaded'
                 response_text = (
-                    f"🖼️ I received the image *{file_name}*\n\n"
-                    "I can help you with:\n"
-                    "• Describing what's in the image\n"
-                    "• Extracting text (if it contains text)\n"
-                    "• Suggesting improvements\n\n"
-                    "_Let me know what you'd like me to do with it._"
+                    f"🖼️ I received *{file_name}*\n\n"
+                    "Let me know what you'd like me to do with it."
                 )
-
-            # Meeting recordings - offer transcription
             elif file_type in ['mp3', 'mp4', 'wav', 'm4a', 'webm']:
-                action_taken = 'media_uploaded'
                 response_text = (
                     f"🎥 I received *{file_name}*\n\n"
-                    "If this is a meeting recording, I can help generate notes "
-                    "once you have a transcript. Would you like me to:\n"
-                    "• Wait for a transcript to process\n"
-                    "• Provide a template for manual notes\n\n"
-                    "_Note: I cannot directly transcribe audio/video files._"
+                    "If this is a recording, I can help generate notes from a transcript."
                 )
-
             else:
-                action_taken = 'file_acknowledged'
                 response_text = (
                     f"📎 I received *{file_name}*\n\n"
-                    "I've noted this file. Let me know if you'd like me to do anything with it."
+                    "Let me know if you'd like me to do anything with it."
                 )
 
-            # Send response with action buttons
             message_ts = event.get('ts', '')
             thread_ts = event.get('thread_ts', message_ts)
 
             try:
-                # Build blocks with action buttons
-                blocks = [
-                    {
-                        "type": "section",
-                        "text": {
-                            "type": "mrkdwn",
-                            "text": response_text
-                        }
+                blocks = [{
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": response_text
                     }
-                ]
+                }]
 
-                # Add relevant quick action buttons based on file type
+                # Add action buttons for documents
                 if file_type in ['pdf', 'doc', 'docx', 'txt', 'md']:
                     blocks.append({
                         "type": "actions",
@@ -854,7 +1018,6 @@ class SlackFeatures:
                 results.append({
                     'file_id': file_id,
                     'file_name': file_name,
-                    'action': action_taken,
                     'success': True
                 })
 
@@ -872,6 +1035,271 @@ class SlackFeatures:
             'files_processed': len(results),
             'results': results
         }
+
+    def handle_drive_upload_action(self, action_id: str, action_value: str,
+                                   channel_id: str, user_id: str,
+                                   message_ts: str, trigger_id: str = None) -> Dict[str, Any]:
+        """
+        Handle content type selection for Drive upload
+
+        Args:
+            action_id: The action ID (drive_upload_type_X or drive_upload_other)
+            action_value: JSON string with file data and content type
+            channel_id: Channel ID
+            user_id: User who clicked
+            message_ts: Message timestamp
+            trigger_id: Trigger ID for modals
+
+        Returns:
+            Result of the upload
+        """
+        if not self.client or not self.google:
+            return {'success': False, 'error': 'Required clients not configured'}
+
+        try:
+            # Handle "Other" option - open modal for custom description
+            if action_id == 'drive_upload_other':
+                if not trigger_id:
+                    return {'success': False, 'error': 'Trigger ID required for modal'}
+
+                file_data = action_value
+                return self._open_custom_content_type_modal(trigger_id, file_data, channel_id)
+
+            # Parse the action value
+            data = json.loads(action_value)
+            content_type = data.get('content_type', 'Uploads')
+            file_data = json.loads(data.get('file_data', '{}'))
+
+            return self._execute_drive_upload(
+                file_data=file_data,
+                content_type=content_type,
+                channel_id=channel_id,
+                message_ts=message_ts
+            )
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Error parsing action value: {e}")
+            return {'success': False, 'error': 'Invalid action data'}
+        except Exception as e:
+            logger.error(f"Error handling Drive upload action: {e}")
+            return {'success': False, 'error': str(e)}
+
+    def _open_custom_content_type_modal(self, trigger_id: str, file_data: str,
+                                        channel_id: str) -> Dict[str, Any]:
+        """Open modal for custom content type description"""
+        try:
+            self.client.views_open(
+                trigger_id=trigger_id,
+                view={
+                    "type": "modal",
+                    "callback_id": "modal_drive_upload_custom",
+                    "title": {
+                        "type": "plain_text",
+                        "text": "Describe Content"
+                    },
+                    "submit": {
+                        "type": "plain_text",
+                        "text": "Upload"
+                    },
+                    "close": {
+                        "type": "plain_text",
+                        "text": "Cancel"
+                    },
+                    "private_metadata": json.dumps({
+                        'file_data': file_data,
+                        'channel_id': channel_id
+                    }),
+                    "blocks": [
+                        {
+                            "type": "input",
+                            "block_id": "content_description",
+                            "element": {
+                                "type": "plain_text_input",
+                                "action_id": "input_description",
+                                "placeholder": {
+                                    "type": "plain_text",
+                                    "text": "e.g., Youth Group Event Photos"
+                                }
+                            },
+                            "label": {
+                                "type": "plain_text",
+                                "text": "What are these of?"
+                            }
+                        }
+                    ]
+                }
+            )
+            return {'success': True, 'action': 'modal_opened'}
+        except SlackApiError as e:
+            logger.error(f"Error opening modal: {e}")
+            return {'success': False, 'error': str(e)}
+
+    def handle_custom_content_type_submission(self, view: Dict) -> Dict[str, Any]:
+        """
+        Handle submission of custom content type modal
+
+        Args:
+            view: The modal view data
+
+        Returns:
+            Result of the upload
+        """
+        try:
+            # Get the description from the modal
+            values = view.get('state', {}).get('values', {})
+            description = values.get('content_description', {}).get('input_description', {}).get('value', 'Uploads')
+
+            # Get the file data from private_metadata
+            metadata = json.loads(view.get('private_metadata', '{}'))
+            file_data = json.loads(metadata.get('file_data', '{}'))
+            channel_id = metadata.get('channel_id', '')
+
+            return self._execute_drive_upload(
+                file_data=file_data,
+                content_type=description,
+                channel_id=channel_id,
+                message_ts=None
+            )
+
+        except Exception as e:
+            logger.error(f"Error handling custom content type: {e}")
+            return {'success': False, 'error': str(e)}
+
+    def _execute_drive_upload(self, file_data: Dict, content_type: str,
+                              channel_id: str, message_ts: str = None) -> Dict[str, Any]:
+        """
+        Execute the actual upload to Google Drive
+
+        Args:
+            file_data: Dict with file_ids, client_name, drive_folder_id
+            content_type: The content type/description
+            channel_id: Channel to post confirmation
+            message_ts: Optional message to update
+
+        Returns:
+            Upload result
+        """
+        if not self.google:
+            return {'success': False, 'error': 'Google client not configured'}
+
+        file_ids = file_data.get('file_ids', [])
+        client_name = file_data.get('client_name', 'Unknown')
+        drive_folder_id = file_data.get('drive_folder_id', '')
+
+        if not file_ids:
+            return {'success': False, 'error': 'No files to upload'}
+
+        # Create date folder name
+        today = datetime.now().strftime('%Y-%m-%d')
+        folder_name = f"{today} - {content_type}"
+
+        try:
+            # Create the folder in the client's Drive folder
+            folder_result = self.google.create_folder(folder_name, drive_folder_id)
+            if not folder_result.get('success'):
+                raise Exception(f"Failed to create folder: {folder_result.get('error')}")
+
+            new_folder_id = folder_result.get('folder_id')
+            folder_url = folder_result.get('url', '')
+
+            # Download and upload each file
+            uploaded_files = []
+            failed_files = []
+
+            for file_id in file_ids:
+                try:
+                    # Get file info from Slack
+                    file_info = self.client.files_info(file=file_id)
+                    file_data_slack = file_info.get('file', {})
+                    file_name = file_data_slack.get('name', f'file_{file_id}')
+                    file_url = file_data_slack.get('url_private', '')
+                    mime_type = file_data_slack.get('mimetype', 'application/octet-stream')
+
+                    # Download the file
+                    file_content = self.download_slack_file(file_url)
+                    if not file_content:
+                        failed_files.append(file_name)
+                        continue
+
+                    # Upload to Google Drive
+                    upload_result = self.google.upload_file(
+                        file_content=file_content,
+                        file_name=file_name,
+                        mime_type=mime_type,
+                        folder_id=new_folder_id
+                    )
+
+                    if upload_result.get('success'):
+                        uploaded_files.append(file_name)
+                    else:
+                        failed_files.append(file_name)
+
+                except Exception as e:
+                    logger.error(f"Error processing file {file_id}: {e}")
+                    failed_files.append(file_id)
+
+            # Send confirmation message
+            if uploaded_files:
+                success_text = (
+                    f"✅ Uploaded {len(uploaded_files)} file{'s' if len(uploaded_files) > 1 else ''} "
+                    f"to *{client_name}/{folder_name}*"
+                )
+
+                if failed_files:
+                    success_text += f"\n⚠️ {len(failed_files)} file(s) failed to upload"
+
+                blocks = [
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": success_text
+                        },
+                        "accessory": {
+                            "type": "button",
+                            "text": {
+                                "type": "plain_text",
+                                "text": "📁 View in Drive",
+                                "emoji": True
+                            },
+                            "url": folder_url,
+                            "action_id": "view_drive_folder"
+                        }
+                    }
+                ]
+
+                self.client.chat_postMessage(
+                    channel=channel_id,
+                    blocks=blocks,
+                    text=success_text
+                )
+
+                return {
+                    'success': True,
+                    'uploaded': len(uploaded_files),
+                    'failed': len(failed_files),
+                    'folder_url': folder_url,
+                    'folder_name': folder_name
+                }
+            else:
+                # All files failed
+                self.client.chat_postMessage(
+                    channel=channel_id,
+                    text=f"❌ Failed to upload files to Google Drive. Please try again."
+                )
+                return {
+                    'success': False,
+                    'error': 'All files failed to upload',
+                    'failed': len(failed_files)
+                }
+
+        except Exception as e:
+            logger.error(f"Error executing Drive upload: {e}")
+            self.client.chat_postMessage(
+                channel=channel_id,
+                text=f"❌ Error uploading to Google Drive: {str(e)}"
+            )
+            return {'success': False, 'error': str(e)}
 
 
 # Scheduler functions for automated tasks

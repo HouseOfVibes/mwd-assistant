@@ -1016,3 +1016,90 @@ class NotionClient:
                 pages.append(service_configs[service_key])
 
         return pages
+
+    def get_client_profile_by_channel(self, database_id: str, slack_channel: str) -> Dict[str, Any]:
+        """
+        Get client profile from Notion by Slack channel name
+
+        Args:
+            database_id: Client Profiles database ID
+            slack_channel: Slack channel name (e.g., '#client-grace-church' or 'client-grace-church')
+
+        Returns:
+            Client profile data including name, Drive folder ID, and content types
+        """
+        if not self.is_configured():
+            return {'success': False, 'error': 'Notion client not configured'}
+
+        try:
+            # Normalize channel name (remove # if present)
+            channel_name = slack_channel.lstrip('#')
+
+            # Query database for matching channel
+            result = self.query_database(
+                database_id,
+                filters={
+                    "property": "Slack Channel",
+                    "rich_text": {
+                        "contains": channel_name
+                    }
+                }
+            )
+
+            if not result.get('success'):
+                return result
+
+            results = result.get('results', [])
+            if not results:
+                return {
+                    'success': False,
+                    'error': f"No client profile found for channel '{slack_channel}'"
+                }
+
+            # Get the first matching profile
+            page = results[0]
+            props = page.get('properties', {})
+
+            # Extract client name (title)
+            client_name = page.get('title', 'Unknown Client')
+
+            # Extract Drive Folder ID
+            drive_folder_prop = props.get('Drive Folder ID', {})
+            drive_folder_id = ''
+            if drive_folder_prop.get('rich_text'):
+                drive_folder_id = ''.join([
+                    t.get('plain_text', '')
+                    for t in drive_folder_prop['rich_text']
+                ])
+
+            # Extract Content Types (multi-select)
+            content_types_prop = props.get('Content Types', {})
+            content_types = []
+            if content_types_prop.get('multi_select'):
+                content_types = [
+                    opt.get('name', '')
+                    for opt in content_types_prop['multi_select']
+                ]
+
+            # Extract Slack Channel for confirmation
+            channel_prop = props.get('Slack Channel', {})
+            stored_channel = ''
+            if channel_prop.get('rich_text'):
+                stored_channel = ''.join([
+                    t.get('plain_text', '')
+                    for t in channel_prop['rich_text']
+                ])
+
+            return {
+                'success': True,
+                'client_name': client_name,
+                'slack_channel': stored_channel,
+                'drive_folder_id': drive_folder_id,
+                'content_types': content_types,
+                'page_id': page.get('id'),
+                'page_url': page.get('url')
+            }
+
+        except Exception as e:
+            logger.error(f"Notion get client profile error: {e}")
+            return {'success': False, 'error': str(e)}
