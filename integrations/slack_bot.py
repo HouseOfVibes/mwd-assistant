@@ -59,12 +59,15 @@ class SlackBot:
                 self.gemini_client = genai.Client(api_key=api_key)
 
     def is_configured(self) -> bool:
-        """Check if bot is properly configured"""
+        """Check if bot is properly configured for basic Slack operations"""
         return (SLACK_SDK_AVAILABLE and
                 bool(self.bot_token) and
                 self.client is not None and
-                self.bot_user_id is not None and  # Ensures auth succeeded
-                self.gemini_client is not None)
+                self.bot_user_id is not None)  # Ensures auth succeeded
+
+    def is_fully_configured(self) -> bool:
+        """Check if bot is configured with AI orchestration (Gemini)"""
+        return self.is_configured() and self.gemini_client is not None
 
     def verify_request(self, timestamp: str, signature: str, body: bytes) -> bool:
         """Verify Slack request signature"""
@@ -107,6 +110,17 @@ class SlackBot:
         # Remove bot mention from message
         if self.bot_user_id:
             user_message = user_message.replace(f'<@{self.bot_user_id}>', '').strip()
+
+        # Check if AI orchestration is available
+        if not self.is_fully_configured():
+            # Respond with a simple message if Gemini isn't configured
+            self._send_message(
+                channel_id,
+                "I'm currently running in limited mode (AI orchestration not configured). "
+                "Please contact the admin to set up `GEMINI_API_KEY` for full functionality.",
+                thread_ts=thread_ts or message_ts
+            )
+            return {'success': True, 'limited_mode': True}
 
         # Get conversation history for context
         conversation_history = await self._get_conversation_history(
@@ -376,13 +390,14 @@ Analyze this request and provide your orchestration plan."""
                     )
 
                 elif action_type == 'BRANDING':
-                    from integrations.invoice_system import InvoiceSystemClient
                     # Call internal branding endpoint
                     import requests
-                    result = requests.post(
+                    response = requests.post(
                         'http://localhost:8080/branding',
-                        json=params
-                    ).json()
+                        json=params,
+                        timeout=60
+                    )
+                    result = response.json() if response.ok else {'success': False, 'error': response.text}
 
                 elif action_type == 'COMPETITORS':
                     from integrations.perplexity import PerplexityClient

@@ -7,7 +7,10 @@ Handles branding, website design, social media, copywriting, and workspace manag
 import os
 import hmac
 import hashlib
+import smtplib
 import logging
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
@@ -68,7 +71,8 @@ def check_config():
         'google_workspace': 'configured' if google_client.is_configured() else 'optional',
         'slack_bot': 'configured' if slack_bot.is_configured() else 'optional',
         'supabase': 'configured' if os.getenv('SUPABASE_URL') else 'optional',
-        'contact_webhook': 'configured' if os.getenv('CONTACT_WEBHOOK_SECRET') else 'optional'
+        'email': 'configured' if os.getenv('SMTP_HOST') else 'optional',
+        'contact_webhook': 'configured' if os.getenv('CONTACT_WEBHOOK_SECRET') else 'optional',
     }
     return config_status
 
@@ -590,13 +594,8 @@ def slack_events():
 
     if event_type == 'reaction_added':
         # Handle reaction to move files to Drive
-        async def process_reaction():
-            await slack_features.handle_reaction_to_move(event)
-
         try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(process_reaction())
+            asyncio.run(slack_features.handle_reaction_to_move(event))
         except Exception as e:
             logger.error(f"Error processing reaction: {e}")
 
@@ -615,25 +614,14 @@ def slack_events():
 
         # Check for file uploads
         if event.get('files'):
-            async def process_files():
-                await slack_features.handle_file_upload(event, channel_id)
-
             try:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                loop.run_until_complete(process_files())
+                asyncio.run(slack_features.handle_file_upload(event, channel_id))
             except Exception as e:
                 logger.error(f"Error processing file upload: {e}")
         else:
-            # Process message asynchronously
-            async def process():
-                await slack_bot.handle_message(event, channel_id, thread_ts)
-
-            # Run async handler
+            # Process message with AI orchestration
             try:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                loop.run_until_complete(process())
+                asyncio.run(slack_bot.handle_message(event, channel_id, thread_ts))
             except Exception as e:
                 logger.error(f"Error processing Slack event: {e}")
 
@@ -890,10 +878,173 @@ def verify_webhook_signature(payload: bytes, signature: str) -> bool:
     return hmac.compare_digest(signature, expected_signature)
 
 
+def send_email(to_email: str, subject: str, html_body: str, text_body: str = None) -> dict:
+    """
+    Send email via SMTP
+
+    Args:
+        to_email: Recipient email address
+        subject: Email subject
+        html_body: HTML content of the email
+        text_body: Plain text fallback (optional)
+
+    Returns:
+        Success/failure dict
+    """
+    smtp_host = os.getenv('SMTP_HOST', '')
+    smtp_port = int(os.getenv('SMTP_PORT', '587'))
+    smtp_user = os.getenv('SMTP_USER', '')
+    smtp_password = os.getenv('SMTP_PASSWORD', '')
+    from_email = os.getenv('SMTP_FROM_EMAIL', smtp_user)
+    from_name = os.getenv('SMTP_FROM_NAME', 'MW Design Studio')
+
+    if not all([smtp_host, smtp_user, smtp_password]):
+        logger.warning("SMTP not configured, skipping email")
+        return {'success': False, 'error': 'SMTP not configured'}
+
+    try:
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = subject
+        msg['From'] = f"{from_name} <{from_email}>"
+        msg['To'] = to_email
+
+        # Add plain text part
+        if text_body:
+            msg.attach(MIMEText(text_body, 'plain'))
+
+        # Add HTML part
+        msg.attach(MIMEText(html_body, 'html'))
+
+        # Send email
+        with smtplib.SMTP(smtp_host, smtp_port) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_password)
+            server.send_message(msg)
+
+        logger.info(f"Email sent successfully to {to_email}")
+        return {'success': True, 'to': to_email}
+
+    except Exception as e:
+        logger.error(f"Failed to send email: {e}")
+        return {'success': False, 'error': str(e)}
+
+
+def format_deliverables_email(contact_data: dict, deliverables: dict) -> str:
+    """Format deliverables as HTML email - FOR INTERNAL TEAM USE"""
+    company_name = contact_data.get('company_name', 'Your Company')
+
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+            .container {{ max-width: 800px; margin: 0 auto; padding: 20px; }}
+            .header {{ background: #2c3e50; color: white; padding: 30px; text-align: center; }}
+            .section {{ margin: 30px 0; padding: 20px; background: #f9f9f9; border-radius: 8px; }}
+            .section h2 {{ color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }}
+            .footer {{ text-align: center; padding: 20px; color: #666; font-size: 14px; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>Strategy Deliverables</h1>
+                <p>Prepared for {company_name}</p>
+            </div>
+    """
+
+    section_titles = {
+        'branding': 'Brand Strategy',
+        'website': 'Website Design Plan',
+        'social': 'Social Media Strategy',
+        'copywriting': 'Marketing Copy'
+    }
+
+    for key, title in section_titles.items():
+        if key in deliverables:
+            content = deliverables[key].get('response', '')
+            content_html = content.replace('\n', '<br>')
+            html += f"""
+            <div class="section">
+                <h2>{title}</h2>
+                <div>{content_html}</div>
+            </div>
+            """
+
+    html += """
+            <div class="footer">
+                <p>Generated by MWD Assistant</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+    return html
+
+
+def format_thank_you_email(contact_data: dict) -> str:
+    """Format thank you email for leads - NO deliverables included"""
+    contact_name = contact_data.get('contact_name', 'there')
+    company_name = contact_data.get('company_name', 'your company')
+
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            body {{ font-family: Arial, sans-serif; line-height: 1.8; color: #333; }}
+            .container {{ max-width: 600px; margin: 0 auto; padding: 40px 20px; }}
+            .header {{ text-align: center; margin-bottom: 30px; }}
+            .header h1 {{ color: #2c3e50; margin-bottom: 10px; }}
+            .content {{ background: #f9f9f9; padding: 30px; border-radius: 8px; }}
+            .footer {{ text-align: center; padding: 30px 0; color: #666; font-size: 14px; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>Thank You!</h1>
+            </div>
+            <div class="content">
+                <p>Hi {contact_name},</p>
+
+                <p>Thank you for reaching out to MW Design Studio about {company_name}! We're excited to learn more about your project.</p>
+
+                <p>We've received your information and our team is already reviewing it. <strong>You can expect to hear from us within 24-48 hours.</strong></p>
+
+                <p>In the meantime, feel free to check out some of our recent work at <a href="https://mwdesignstudio.com">mwdesignstudio.com</a>.</p>
+
+                <p>We look forward to connecting with you soon!</p>
+
+                <p>Best,<br>
+                <strong>The MW Design Studio Team</strong><br>
+                Sheri & Tierra</p>
+            </div>
+            <div class="footer">
+                <p>MW Design Studio | Empowering small businesses with big ideas</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+    return html
+
+
 @app.route('/api/contact', methods=['POST'])
 def receive_contact():
     """
     Receive contact form submission from website
+
+    Flow:
+    1. Verify webhook signature
+    2. Generate AI deliverables (branding, website, social, copywriting)
+    3. Send "thank you" email to lead (NO deliverables - just confirmation)
+    4. Send notification email to team (contact@mwdesign.agency)
+    5. Send FULL deliverables to Slack channel for team review
+    6. Return deliverables in response
 
     Expected headers:
         X-Webhook-Signature: HMAC-SHA256 signature
@@ -923,8 +1074,10 @@ def receive_contact():
 
     try:
         contact_data = request.json
+        contact_email = contact_data.get('contact_email', '')
+        company_name = contact_data.get('company_name', 'Unknown')
 
-        logger.info(f"Received contact form: {contact_data.get('company_name')} - {contact_data.get('contact_email')}")
+        logger.info(f"Received contact form: {company_name} - {contact_email}")
 
         # Generate AI deliverables
         workflows_triggered = []
@@ -959,25 +1112,91 @@ def receive_contact():
             'complexity_score': 7,
             'estimated_hours': len(workflows_triggered) * 20,
             'recommended_package': 'premium' if len(contact_data.get('key_services', [])) > 2 else 'standard',
-            'summary': f"Client {contact_data.get('company_name')} in {contact_data.get('industry')} seeking {', '.join(contact_data.get('key_services', []))}",
+            'summary': f"Client {company_name} in {contact_data.get('industry', 'N/A')} seeking {', '.join(contact_data.get('key_services', []))}",
             'deliverables_generated': workflows_triggered
         }
 
-        # Notify via Slack if configured
+        # Send thank you email to lead (NO deliverables - just confirmation)
+        lead_email_sent = False
+        if contact_email:
+            thank_you_html = format_thank_you_email(contact_data)
+            email_result = send_email(
+                to_email=contact_email,
+                subject=f"Thank You for Contacting MW Design Studio!",
+                html_body=thank_you_html,
+                text_body=f"Thank you for reaching out! We've received your information and will be in touch within 24-48 hours."
+            )
+            lead_email_sent = email_result.get('success', False)
+
+        # Send notification email to team (contact@mwdesign.agency)
+        team_email_sent = False
+        team_email = os.getenv('TEAM_NOTIFICATION_EMAIL', 'contact@mwdesign.agency')
+        if team_email:
+            team_html = f"""
+            <h2>New Contact Form Submission</h2>
+            <p><strong>Company:</strong> {company_name}</p>
+            <p><strong>Contact:</strong> {contact_data.get('contact_name', 'N/A')} ({contact_email})</p>
+            <p><strong>Phone:</strong> {contact_data.get('phone', 'N/A')}</p>
+            <p><strong>Industry:</strong> {contact_data.get('industry', 'N/A')}</p>
+            <p><strong>Services:</strong> {', '.join(contact_data.get('key_services', []))}</p>
+            <p><strong>Budget:</strong> {contact_data.get('budget', 'N/A')}</p>
+            <p><strong>Timeline:</strong> {contact_data.get('timeline', 'N/A')}</p>
+            <p><strong>Message:</strong> {contact_data.get('message', 'N/A')}</p>
+            <hr>
+            <p><strong>Deliverables Generated:</strong> {len(deliverables)}</p>
+            <p><em>Full deliverables sent to Slack channel for review.</em></p>
+            """
+            team_result = send_email(
+                to_email=team_email,
+                subject=f"New Lead: {company_name} - {contact_data.get('contact_name', 'Unknown')}",
+                html_body=team_html,
+                text_body=f"New contact form submission from {company_name}"
+            )
+            team_email_sent = team_result.get('success', False)
+
+        # Send FULL DELIVERABLES to Slack for team review
+        slack_notified = False
         if slack_bot.is_configured():
             notification_channel = os.getenv('SLACK_NOTIFICATION_CHANNEL', '')
             if notification_channel:
                 try:
+                    # First message: Lead info summary
                     slack_bot._send_message(
                         notification_channel,
-                        f"*New Contact Form Submission*\n\n"
-                        f"*Company:* {contact_data.get('company_name')}\n"
-                        f"*Contact:* {contact_data.get('contact_name')} ({contact_data.get('contact_email')})\n"
-                        f"*Industry:* {contact_data.get('industry')}\n"
+                        f"*New Lead* 📬 *{company_name}*\n\n"
+                        f"*Contact:* {contact_data.get('contact_name', 'N/A')} ({contact_email})\n"
+                        f"*Phone:* {contact_data.get('phone', 'N/A')}\n"
+                        f"*Industry:* {contact_data.get('industry', 'N/A')}\n"
                         f"*Services:* {', '.join(contact_data.get('key_services', []))}\n"
-                        f"*Budget:* {contact_data.get('budget')}\n\n"
-                        f"*Deliverables Generated:* {len(deliverables)}"
+                        f"*Budget:* {contact_data.get('budget', 'N/A')}\n"
+                        f"*Timeline:* {contact_data.get('timeline', 'N/A')}\n"
+                        f"*Message:* {contact_data.get('message', 'N/A')}\n\n"
+                        f"_Thank you email sent to lead: {'Yes' if lead_email_sent else 'No'}_\n"
+                        f"_Team email sent: {'Yes' if team_email_sent else 'No'}_\n\n"
+                        f"*Deliverables generated below* ⬇️"
                     )
+
+                    # Send each deliverable as a separate message for readability
+                    deliverable_titles = {
+                        'branding': '🎨 Brand Strategy',
+                        'website': '🌐 Website Design Plan',
+                        'social': '📱 Social Media Strategy',
+                        'copywriting': '✍️ Marketing Copy'
+                    }
+
+                    for key, title in deliverable_titles.items():
+                        if key in deliverables:
+                            content = deliverables[key].get('response', '')
+                            # Truncate if too long for Slack (max ~4000 chars per message)
+                            if len(content) > 3500:
+                                content = content[:3500] + "\n\n_[Content truncated - see full version in API response]_"
+
+                            slack_bot._send_message(
+                                notification_channel,
+                                f"*{title}* for {company_name}\n\n{content}"
+                            )
+
+                    slack_notified = True
                 except Exception as e:
                     logger.error(f"Failed to send Slack notification: {e}")
 
@@ -987,6 +1206,11 @@ def receive_contact():
             'message': 'Contact form processed successfully',
             'workflows_triggered': workflows_triggered,
             'deliverables_count': len(deliverables),
+            'notifications': {
+                'lead_thank_you_email': lead_email_sent,
+                'team_email_sent': team_email_sent,
+                'slack_deliverables_sent': slack_notified
+            },
             'assessment': assessment,
             'deliverables': {
                 key: {
@@ -1027,7 +1251,7 @@ if __name__ == '__main__':
     print("  Slack Bot: /slack/events, /slack/interact")
 
     print("\nContact Form Endpoint:")
-    print("  POST /api/contact")
+    print("  POST /api/contact (generates deliverables + sends email)")
 
     print("\n" + "="*50 + "\n")
 
