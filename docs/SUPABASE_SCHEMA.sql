@@ -41,7 +41,6 @@ CREATE TABLE IF NOT EXISTS projects (
     payment_status VARCHAR(50),
     deliverables JSONB DEFAULT '{}',
     notion_url TEXT,
-    google_drive_folder TEXT,
     slack_channel VARCHAR(100),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()

@@ -1027,7 +1027,6 @@ class NotionClient:
 
         Returns:
             Client profile data including name and content types
-            (client folder is looked up by name in Google Drive)
         """
         if not self.is_configured():
             return {'success': False, 'error': 'Notion client not configured'}

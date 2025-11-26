@@ -193,7 +193,6 @@ Authorization: Bearer <shared_secret_token>
   "estimated_completion": "2025-03-15",
   "agent_workspace": {
     "notion_project_url": "https://notion.so/techflow-project",
-    "google_drive_folder": "https://drive.google.com/drive/folders/...",
     "slack_channel": "#client-techflow"
   },
   "milestones": [
@@ -588,7 +587,6 @@ CREATE TABLE projects (
   payment_status VARCHAR(50),
   deliverables JSONB,
   notion_url TEXT,
-  google_drive_folder TEXT,
   slack_channel VARCHAR(100),
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()

@@ -19,7 +19,6 @@ from integrations.gemini import GeminiClient
 from integrations.openai_client import OpenAIClient
 from integrations.perplexity import PerplexityClient
 from integrations.notion import NotionClient
-from integrations.google_workspace import GoogleWorkspaceClient
 from integrations.slack_bot import SlackBot
 from integrations.slack_features import SlackFeatures, setup_scheduler
 import asyncio
@@ -42,7 +41,6 @@ perplexity_client = PerplexityClient()
 
 # Initialize Integration clients
 notion_client = NotionClient()
-google_client = GoogleWorkspaceClient()
 slack_bot = SlackBot()
 
 # Initialize Slack features with required clients
@@ -50,8 +48,7 @@ slack_features = SlackFeatures(
     slack_client=slack_bot.client,
     notion_client=notion_client,
     gemini_client=gemini_client,
-    supabase_client=None,  # Will be set if Supabase is configured
-    google_client=google_client
+    supabase_client=None  # Will be set if Supabase is configured
 )
 
 # Set up scheduler for automated tasks (reminders, digests)
@@ -68,7 +65,6 @@ def check_config():
         'perplexity': 'configured' if perplexity_client.is_configured() else 'optional',
         # Integrations
         'notion': 'configured' if notion_client.is_configured() else 'optional',
-        'google_workspace': 'configured' if google_client.is_configured() else 'optional',
         'slack_bot': 'configured' if slack_bot.is_configured() else 'optional',
         'supabase': 'configured' if os.getenv('SUPABASE_URL') else 'optional',
         'email': 'configured' if os.getenv('SMTP_HOST') else 'optional',
@@ -205,12 +201,6 @@ def home():
                 'POST /notion/meeting-notes',
                 'GET /notion/search',
                 'POST /notion/client-portal'
-            ],
-            'google': [
-                'POST /google/drive/folder',
-                'POST /google/drive/project-structure',
-                'POST /google/docs/document',
-                'POST /google/docs/deliverable'
             ],
             'slack': [
                 'POST /slack/events',
@@ -471,71 +461,6 @@ def notion_client_portal():
 
 
 # =============================================================================
-# GOOGLE WORKSPACE ENDPOINTS
-# =============================================================================
-
-@app.route('/google/drive/folder', methods=['POST'])
-def google_create_folder():
-    """Create a folder in Google Drive"""
-    data = request.json
-    name = data.get('name', '')
-    parent_id = data.get('parent_id', None)
-    result = google_client.create_folder(name, parent_id)
-    return jsonify(result)
-
-
-@app.route('/google/drive/project-structure', methods=['POST'])
-def google_create_project_structure():
-    """Create project folder structure in Google Drive"""
-    data = request.json
-    project_name = data.get('project_name', '')
-    parent_id = data.get('parent_id', None)
-    result = google_client.create_project_structure(project_name, parent_id)
-    return jsonify(result)
-
-
-@app.route('/google/drive/files', methods=['GET'])
-def google_list_files():
-    """List files in Google Drive folder"""
-    folder_id = request.args.get('folder_id', None)
-    file_type = request.args.get('file_type', None)
-    result = google_client.list_files(folder_id, file_type)
-    return jsonify(result)
-
-
-@app.route('/google/drive/share', methods=['POST'])
-def google_share_file():
-    """Share a file or folder"""
-    data = request.json
-    file_id = data.get('file_id', '')
-    email = data.get('email', '')
-    role = data.get('role', 'reader')
-    result = google_client.share_file(file_id, email, role)
-    return jsonify(result)
-
-
-@app.route('/google/docs/document', methods=['POST'])
-def google_create_document():
-    """Create a Google Doc"""
-    data = request.json
-    title = data.get('title', '')
-    folder_id = data.get('folder_id', None)
-    result = google_client.create_document(title, folder_id)
-    return jsonify(result)
-
-
-@app.route('/google/docs/deliverable', methods=['POST'])
-def google_create_deliverable():
-    """Create a formatted deliverable document"""
-    data = request.json
-    title = data.get('title', '')
-    content = data.get('content', {})
-    folder_id = data.get('folder_id', None)
-    result = google_client.create_deliverable_doc(title, content, folder_id)
-    return jsonify(result)
-
-
-# =============================================================================
 # SLACK BOT ENDPOINTS
 # =============================================================================
 
@@ -590,15 +515,6 @@ def slack_events():
     if event_type == 'assistant_thread_context_changed':
         # Context changed - could be used to update bot behavior
         # For now, just acknowledge
-        return jsonify({'ok': True})
-
-    if event_type == 'reaction_added':
-        # Handle reaction to move files to Drive
-        try:
-            asyncio.run(slack_features.handle_reaction_to_move(event))
-        except Exception as e:
-            logger.error(f"Error processing reaction: {e}")
-
         return jsonify({'ok': True})
 
     if event_type == 'app_mention' or event_type == 'message':
@@ -683,19 +599,6 @@ def slack_interact():
                 # Trigger key points extraction
                 logger.info(f"Extract key points from file: {file_id}")
 
-            # Handle Google Drive upload actions
-            elif action_id.startswith('drive_upload_type_') or action_id == 'drive_upload_other':
-                message_ts = payload.get('message', {}).get('ts', '')
-                result = slack_features.handle_drive_upload_action(
-                    action_id=action_id,
-                    action_value=action.get('value', ''),
-                    channel_id=channel,
-                    user_id=user_id,
-                    message_ts=message_ts,
-                    trigger_id=trigger_id
-                )
-                logger.info(f"Drive upload action result: {result}")
-
     elif action_type == 'view_submission':
         # Handle modal submissions
         view = payload.get('view', {})
@@ -737,21 +640,6 @@ def slack_interact():
                 slack_bot._send_message(
                     channel,
                     f"*Research Results: {topic}* 🔍\n\n{result.get('response', '')[:3000]}"
-                )
-
-        elif callback_id == 'modal_project_folder':
-            # Create project folder in Google Drive
-            project_name = ''
-            for block_id, block_values in values.items():
-                for input_id, input_data in block_values.items():
-                    if block_id == 'project_name':
-                        project_name = input_data.get('value', '')
-
-            result = google_client.create_project_structure(project_name)
-            if result.get('success') and channel:
-                slack_bot._send_message(
-                    channel,
-                    f"*Project Folder Created* 📁\n\nProject: {project_name}\nFolder ID: {result.get('folder_id', 'N/A')}"
                 )
 
         elif callback_id == 'modal_client_portal':
@@ -797,11 +685,6 @@ def slack_interact():
                     channel,
                     "NOTION_PORTALS_PAGE environment variable not set. Please configure it first."
                 )
-
-        elif callback_id == 'modal_drive_upload_custom':
-            # Handle custom content type for Drive upload
-            result = slack_features.handle_custom_content_type_submission(view)
-            logger.info(f"Custom content type upload result: {result}")
 
     return jsonify({'ok': True})
 
@@ -1247,7 +1130,6 @@ if __name__ == '__main__':
 
     print("\nIntegration Endpoints:")
     print("  Notion: /notion/project, /meeting-notes, /search")
-    print("  Google: /google/drive/*, /google/docs/*")
     print("  Slack Bot: /slack/events, /slack/interact")
 
     print("\nContact Form Endpoint:")

@@ -19,10 +19,6 @@ supabase>=2.24.0               # Supabase client (Nov 2025)
 # Scheduling
 apscheduler>=3.10.4            # Background job scheduler for reminders/digests
 
-# Google Workspace APIs
-google-api-python-client>=2.150.0  # Google Drive, Docs, Gmail
-google-auth>=2.35.0                # Google authentication
-
 # MCP (Model Context Protocol) - Multi-AI Coordination
 mcp[cli]>=1.21.0               # Official MCP Python SDK (Nov 2025)
 mcp-server-git>=2025.9.25      # Git repository integration

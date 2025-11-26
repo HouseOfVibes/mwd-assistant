@@ -262,11 +262,10 @@ Know who handles what - route questions to the right person when needed.
 
 **Workspace Tools:**
 8. NOTION - Search workspace, get overview, query databases, create/update projects, meeting notes
-9. GOOGLE_DRIVE - Create folders, project structures, documents
-10. CLIENT_PORTAL - Build comprehensive Notion portals for clients
+9. CLIENT_PORTAL - Build comprehensive Notion portals for clients
 
 **Communication:**
-11. TEAM_MESSAGE - Draft internal team messages (via GPT)
+10. TEAM_MESSAGE - Draft internal team messages (via GPT)
 
 ## How to Respond
 
@@ -522,22 +521,6 @@ Subject: [subject line]
                         )
                     else:
                         result = {'success': False, 'error': f'Unknown Notion operation: {operation}. Available: create_project, search, search_all, query_database, get_database_schema, update_status, create_meeting_notes, workspace_overview, create_client_portal'}
-
-                elif action_type == 'GOOGLE_DRIVE':
-                    from integrations.google_workspace import GoogleWorkspaceClient
-                    client = GoogleWorkspaceClient()
-                    if params.get('operation') == 'create_folder':
-                        result = client.create_folder(
-                            params.get('name', ''),
-                            params.get('parent_id')
-                        )
-                    elif params.get('operation') == 'create_project_structure':
-                        result = client.create_project_structure(
-                            params.get('project_name', ''),
-                            params.get('parent_id')
-                        )
-                    else:
-                        result = {'success': False, 'error': 'Unknown Drive operation'}
 
                 elif action_type == 'CLIENT_PORTAL':
                     from integrations.notion import NotionClient

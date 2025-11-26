@@ -61,7 +61,6 @@
 | Slack Bot | Pending Auth | Conversational interface with Gemini orchestrator |
 | Invoice System | Ready | Receive webhooks, create leads, attach deliverables |
 | Notion | Ready | Create projects, meeting notes, search workspace |
-| Google Drive | Ready | Folders, project structure, file sharing |
 | Google Docs | Ready | Documents, formatted deliverables |
 | Supabase | Schema Ready | Database schema defined, needs table creation |
 
@@ -142,10 +141,6 @@ SLACK_SIGNING_SECRET
 NOTION_API_KEY
 SUPABASE_URL
 SUPABASE_KEY
-
-# Google Workspace
-GOOGLE_CLOUD_PROJECT
-GOOGLE_CREDENTIALS_PATH
 
 # Invoice System
 MWD_INVOICE_SYSTEM_URL

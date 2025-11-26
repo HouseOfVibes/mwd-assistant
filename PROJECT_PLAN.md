@@ -12,7 +12,7 @@
 The MWD Assistant is an intelligent AI-powered assistant designed to streamline MW Design Studio's business operations across multiple domains: branding, website design, social media strategy, copywriting, client communication, and workspace management.
 
 ### Vision
-Create a centralized AI agent that integrates with the existing workspace tools (Notion, Slack, Google Workspace, Gemini, ChatGPT, Perplexity) to automate workflows, enhance productivity, and deliver consistent, high-quality output for client projects.
+Create a centralized AI agent that integrates with the existing workspace tools (Notion, Slack, Gemini, ChatGPT, Perplexity) to automate workflows, enhance productivity, and deliver consistent, high-quality output for client projects.
 
 ### Current Status
 - **Phase:** Early Development (MVP)
@@ -53,7 +53,6 @@ MWD WORKSPACE MANAGEMENT SYSTEM
 │  ┌───────────────────────────────────────────────────┐  │
 │  │ • Notion Workspace Understanding & Sync           │  │
 │  │ • Google Meet → Automatic Meeting Notes           │  │
-│  │ • Google Drive → File Organization & Management   │  │
 │  │ • In-Person Notes Management (via Notion)         │  │
 │  │ • Action Item Extraction & Tracking               │  │
 │  │ • Project Timeline Updates                        │  │
@@ -93,7 +92,7 @@ Deliverables: Team     Communication      Specialized
 ### Core Components
 
 #### 1. AI Agent Layer
-- **Primary AI:** Gemini (Google) - Main workspace management, meeting notes, Notion integration, Google Drive
+- **Primary AI:** Gemini (Google) - Main workspace management, meeting notes, Notion integration
 - **Architecture AI:** Claude (Anthropic) - Current MVP implementation for branding/website/social/copywriting strategy
 - **Internal Comms AI:** ChatGPT (planned) - Google Chat integration for team communication
 - **Client Comms AI:** Perplexity (planned) - Slack integration for client communication
@@ -103,7 +102,6 @@ Deliverables: Team     Communication      Specialized
 - **MWD Invoice System** - Client lifecycle management, invoicing, contracts, CRM, lead tracking (https://github.com/HouseOfVibes/mwd-invoice-system)
 - **Notion API** - Workspace management, project tracking, knowledge base
 - **Google Workspace APIs:**
-  - Google Drive - File storage and organization
   - Google Docs - Document creation and collaboration
   - Gmail - Email communication
   - Google Meet + Gemini - Automated meeting transcription, note-taking, and action item extraction
@@ -158,7 +156,6 @@ Deliverables: Team     Communication      Specialized
 🔲 **Gemini Workspace Management** - PRIMARY SYSTEM
 - Notion workspace understanding and sync
 - Google Meet automatic meeting notes
-- Google Drive organization and file management
 - In-person notes management via Notion
 - Action item extraction and tracking
 - Project timeline updates
@@ -185,7 +182,6 @@ Deliverables: Team     Communication      Specialized
 - **Client Portal Integration**
   - Agent-generated content visible in client portal
   - Proposal PDFs auto-populated
-  - Project files linked to Google Drive folders
 
 #### Notion Integration
 - **Project Database Sync**
@@ -204,11 +200,6 @@ Deliverables: Team     Communication      Specialized
   - Case study repository
 
 #### Google Workspace Integration
-- **Google Drive**
-  - Auto-organize client folders
-  - Store generated assets (logos, mockups, copy)
-  - Version control for deliverables
-
 - **Gmail**
   - Draft client communications
   - Auto-respond to common inquiries
@@ -233,7 +224,7 @@ Deliverables: Team     Communication      Specialized
 ### Phase 3: Advanced Intelligence (Future)
 
 #### Multi-AI Orchestration (Specialized Roles)
-- **Gemini (PRIMARY)** - Workspace intelligence, meeting transcription, note-taking, action item extraction, Notion workspace understanding, Google Drive management
+- **Gemini (PRIMARY)** - Workspace intelligence, meeting transcription, note-taking, action item extraction, Notion workspace understanding
 - **Claude** - Strategic deliverables (branding, website design, UX/UI reasoning) - technical architecture planning
 - **ChatGPT** - Internal team communication via Google Chat, announcements, conversational content
 - **Perplexity** - Client communication via Slack, external messaging, industry research
@@ -314,12 +305,11 @@ POST /multi-agent           - Orchestrate multiple AI models
    - Claude → /copywriting (initial copy)
 5. Gemini orchestrates deliverables:
    - Creates Notion project page with all outputs
-   - Organizes Google Drive folder structure
    - Links deliverables to Invoice System proposal
 6. ChatGPT sends Google Chat notification to team
 7. Perplexity drafts Slack welcome message to client
 8. Gemini triggers invoice creation in Invoice System
-9. All deliverables linked across: Notion, Drive, Invoice Portal
+9. All deliverables linked across: Notion, Invoice Portal
 ```
 
 ### Workflow 2: Meeting Notes Processing (Gemini Integration)
@@ -443,23 +433,6 @@ MW Design Studio Workspace
 │   └── Best Practices
 └── ✅ Tasks & Deliverables
     └── Linked to Projects
-```
-
-### Google Drive Structure
-```
-MW Design Studio
-├── Clients/
-│   └── [Client Name]/
-│       ├── Brand Assets/
-│       ├── Website Files/
-│       ├── Social Media/
-│       ├── Documents/
-│       └── Deliverables/
-└── Templates/
-    ├── Brand Strategy Template
-    ├── Website Proposal Template
-    ├── Social Media Plan Template
-    └── Client Contract Template
 ```
 
 ### Slack Channel Architecture
@@ -610,8 +583,6 @@ SUPABASE_URL
 SUPABASE_KEY
 SLACK_TOKEN
 NOTION_TOKEN
-GOOGLE_CLIENT_ID
-GOOGLE_CLIENT_SECRET
 MWD_INVOICE_SYSTEM_URL (for webhook integration)
 MWD_INVOICE_SYSTEM_API_KEY
 ```

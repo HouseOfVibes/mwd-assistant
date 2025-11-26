@@ -7,7 +7,7 @@
 [![Flask](https://img.shields.io/badge/flask-3.1.2-green.svg)](https://flask.palletsprojects.com/)
 [![MCP](https://img.shields.io/badge/MCP-1.21.1-purple.svg)](https://modelcontextprotocol.io/)
 
-Your team's intelligent assistant for managing clients, projects, and creative workflows. Chat naturally about branding, website design, social media strategy, copywriting, and workspace management. Integrates with Notion, Google Workspace, Slack, and the MWD Invoice System.
+Your team's intelligent assistant for managing clients, projects, and creative workflows. Chat naturally about branding, website design, social media strategy, copywriting, and workspace management. Integrates with Notion, Slack, and the MWD Invoice System.
 
 ## ✨ What's New (November 2025)
 
@@ -24,8 +24,7 @@ Your team's intelligent assistant for managing clients, projects, and creative w
 ## 🎯 Features
 
 - **AI-Powered Strategy Generation**: Branding, website design, social media, and copywriting deliverables
-- **Workspace Intelligence**: Gemini-powered meeting notes, Notion sync, and Google Drive organization
-- **Channel Uploads to Google Drive**: Automatically upload files from Slack channels to organized client folders in Google Drive with content type selection
+- **Workspace Intelligence**: Gemini-powered meeting notes and Notion sync
 - **Multi-AI Orchestration**: Specialized AI routing (Gemini, Claude, ChatGPT, Perplexity)
 - **MCP Integration**: Model Context Protocol for standardized AI tool access and multi-agent coordination
 - **Persistent Memory**: Long-term memory storage across AI sessions for consistent client context
@@ -40,7 +39,6 @@ Your team's intelligent assistant for managing clients, projects, and creative w
 │           GEMINI (PRIMARY AI - CORE SYSTEM)             │
 │  • Notion Workspace Understanding & Sync                │
 │  • Google Meet → Automatic Meeting Notes                │
-│  • Google Drive → File Organization & Management        │
 │  • Action Item Extraction & Tracking                    │
 └─────────────────────────────────────────────────────────┘
                             │
@@ -128,12 +126,6 @@ SLACK_SIGNING_SECRET=your-signing-secret
 SUPABASE_URL=your_supabase_url_here
 SUPABASE_KEY=your_supabase_key_here
 
-# Google Drive Integration (for channel uploads)
-# Use ONE of these - JSON is for Railway/cloud, PATH is for local development
-GOOGLE_CREDENTIALS_JSON={"type":"service_account",...}  # Full JSON content
-GOOGLE_CREDENTIALS_PATH=/path/to/service-account.json   # Or file path
-GOOGLE_CLIENT_FOLDERS_ID=your_client_folders_parent_id  # Parent folder for all clients
-
 # MCP (Model Context Protocol) Servers - Optional
 GITHUB_TOKEN=your_github_personal_access_token_here
 ```
@@ -170,7 +162,6 @@ See [docs/API_INTEGRATION_GUIDE.md](docs/API_INTEGRATION_GUIDE.md) for detailed 
 |--------|----------|-------------|
 | POST | `/gemini/meeting-notes` | Process Google Meet transcripts |
 | POST | `/notion/sync` | Sync project to Notion workspace |
-| POST | `/google/drive/organize` | Organize client folders in Drive |
 | POST | `/gmail/draft` | Draft email communications |
 | POST | `/slack/notify` | Send Slack notifications |
 | POST | `/invoice/create-lead` | Create lead in invoice system |
@@ -219,7 +210,6 @@ mwd-assistant/
    • Claude writes initial copy
 4. Gemini orchestrates outputs:
    • Creates Notion project page
-   • Organizes Google Drive folder
    • Links to Invoice System proposal
 5. ChatGPT notifies team via Google Chat
 6. Perplexity sends welcome to client via Slack
@@ -335,7 +325,6 @@ This agent integrates with the [MWD Invoice System](https://github.com/HouseOfVi
 - [ ] OpenAI API integration for team communication
 - [ ] Perplexity API integration for client communication
 - [ ] Notion API for project management
-- [ ] Google Workspace APIs (Drive, Docs, Gmail)
 - [ ] Invoice System webhooks
 
 ### 📅 Phase 3: Advanced Intelligence (Planned)
