@@ -19,8 +19,8 @@ from integrations.gemini import GeminiClient
 from integrations.openai_client import OpenAIClient
 from integrations.perplexity import PerplexityClient
 from integrations.notion import NotionClient
-from integrations.slack_bot import SlackBot
-from integrations.slack_features import SlackFeatures, setup_scheduler
+from integrations.google_chat import GoogleChatBot
+from integrations.google_chat_features import GoogleChatFeatures, setup_scheduler
 import asyncio
 
 # Configure logging
@@ -41,18 +41,18 @@ perplexity_client = PerplexityClient()
 
 # Initialize Integration clients
 notion_client = NotionClient()
-slack_bot = SlackBot()
+chat_bot = GoogleChatBot()
 
-# Initialize Slack features with required clients
-slack_features = SlackFeatures(
-    slack_client=slack_bot.client,
+# Initialize Google Chat features with required clients
+chat_features = GoogleChatFeatures(
+    chat_client=chat_bot.chat_service,
     notion_client=notion_client,
     gemini_client=gemini_client,
     supabase_client=None  # Will be set if Supabase is configured
 )
 
 # Set up scheduler for automated tasks (reminders, digests)
-scheduler = setup_scheduler(slack_features)
+scheduler = setup_scheduler(chat_features)
 
 # Configuration check
 def check_config():
@@ -65,7 +65,7 @@ def check_config():
         'perplexity': 'configured' if perplexity_client.is_configured() else 'optional',
         # Integrations
         'notion': 'configured' if notion_client.is_configured() else 'optional',
-        'slack_bot': 'configured' if slack_bot.is_configured() else 'optional',
+        'google_chat': 'configured' if chat_bot.is_configured() else 'optional',
         'supabase': 'configured' if os.getenv('SUPABASE_URL') else 'optional',
         'email': 'configured' if os.getenv('SMTP_HOST') else 'optional',
         'contact_webhook': 'configured' if os.getenv('CONTACT_WEBHOOK_SECRET') else 'optional',
@@ -202,12 +202,11 @@ def home():
                 'GET /notion/search',
                 'POST /notion/client-portal'
             ],
-            'slack': [
-                'POST /slack/events',
-                'POST /slack/interact',
-                'POST /slack/reminders',
-                'POST /slack/digest',
-                'POST /slack/quick-actions'
+            'google_chat': [
+                'POST /chat/events',
+                'POST /chat/reminders',
+                'POST /chat/digest',
+                'POST /chat/quick-actions'
             ],
             'contact': [
                 'POST /api/contact'
@@ -461,268 +460,81 @@ def notion_client_portal():
 
 
 # =============================================================================
-# SLACK BOT ENDPOINTS
+# GOOGLE CHAT BOT ENDPOINTS
 # =============================================================================
 
-@app.route('/slack/events', methods=['POST'])
-def slack_events():
+@app.route('/chat/events', methods=['POST'])
+def chat_events():
     """
-    Handle Slack Events API
+    Handle Google Chat Events API
 
-    This endpoint receives all Slack events (messages, mentions, etc.)
+    This endpoint receives all Google Chat events (messages, space events, card clicks)
     and routes them to the appropriate handler.
+
+    Event types:
+    - MESSAGE: User sent a message
+    - ADDED_TO_SPACE: Bot added to a space or DM
+    - REMOVED_FROM_SPACE: Bot removed from a space
+    - CARD_CLICKED: User clicked a card button/action
     """
-    # Verify request signature
-    timestamp = request.headers.get('X-Slack-Request-Timestamp', '')
-    signature = request.headers.get('X-Slack-Signature', '')
+    # Verify request (Google Chat uses bearer token or service account)
+    # For production, implement proper Google Cloud IAP or service account verification
+    auth_header = request.headers.get('Authorization', '')
 
-    if not slack_bot.verify_request(timestamp, signature, request.data):
-        return jsonify({'error': 'Invalid signature'}), 403
+    # Get event data
+    event = request.json
 
-    data = request.json
+    if not event:
+        return jsonify({'error': 'No event data'}), 400
 
-    # Handle URL verification challenge
-    if data.get('type') == 'url_verification':
-        return jsonify({'challenge': data.get('challenge')})
+    event_type = event.get('type', '')
+    logger.info(f"Google Chat event received: {event_type}")
 
-    # Handle events
-    event = data.get('event', {})
-    event_type = event.get('type')
+    try:
+        # Process the event asynchronously
+        result = asyncio.run(chat_bot.handle_event(event))
+        return jsonify(result)
 
-    # Ignore bot messages to prevent loops
-    if event.get('bot_id') or event.get('subtype') == 'bot_message':
-        return jsonify({'ok': True})
-
-    # Handle assistant thread events (Agent/Assistant view)
-    if event_type == 'assistant_thread_started':
-        assistant_thread = event.get('assistant_thread', {})
-        channel_id = assistant_thread.get('channel_id')
-        thread_ts = assistant_thread.get('thread_ts')
-
-        if channel_id and thread_ts:
-            # Set status to show we're processing
-            try:
-                slack_bot.client.assistant_threads_setStatus(
-                    channel_id=channel_id,
-                    thread_ts=thread_ts,
-                    status="Thinking..."
-                )
-            except Exception as e:
-                logger.error(f"Error setting assistant status: {e}")
-
-        return jsonify({'ok': True})
-
-    if event_type == 'assistant_thread_context_changed':
-        # Context changed - could be used to update bot behavior
-        # For now, just acknowledge
-        return jsonify({'ok': True})
-
-    if event_type == 'app_mention' or event_type == 'message':
-        # Only process direct messages or mentions
-        channel_type = event.get('channel_type', '')
-        if event_type == 'message' and channel_type != 'im':
-            # In channels, only respond to mentions
-            if f'<@{slack_bot.bot_user_id}>' not in event.get('text', ''):
-                return jsonify({'ok': True})
-
-        channel_id = event.get('channel')
-        thread_ts = event.get('thread_ts')
-
-        # Check for file uploads
-        if event.get('files'):
-            try:
-                asyncio.run(slack_features.handle_file_upload(event, channel_id))
-            except Exception as e:
-                logger.error(f"Error processing file upload: {e}")
-        else:
-            # Process message with AI orchestration
-            try:
-                asyncio.run(slack_bot.handle_message(event, channel_id, thread_ts))
-            except Exception as e:
-                logger.error(f"Error processing Slack event: {e}")
-
-    return jsonify({'ok': True})
-
-
-@app.route('/slack/interact', methods=['POST'])
-def slack_interact():
-    """
-    Handle Slack interactive components
-
-    Buttons, menus, modals, etc.
-    """
-    # Verify request signature
-    timestamp = request.headers.get('X-Slack-Request-Timestamp', '')
-    signature = request.headers.get('X-Slack-Signature', '')
-
-    if not slack_bot.verify_request(timestamp, signature, request.data):
-        return jsonify({'error': 'Invalid signature'}), 403
-
-    # Parse payload (comes as form data)
-    import json
-    payload = json.loads(request.form.get('payload', '{}'))
-
-    action_type = payload.get('type')
-
-    if action_type == 'block_actions':
-        # Handle button clicks, menu selections
-        actions = payload.get('actions', [])
-        user_id = payload.get('user', {}).get('id', '')
-        channel = payload.get('channel', {}).get('id', '')
-        trigger_id = payload.get('trigger_id', '')
-
-        for action in actions:
-            action_id = action.get('action_id')
-            logger.info(f"Slack action: {action_id}")
-
-            # Handle quick action buttons
-            if action_id.startswith('quick_'):
-                result = slack_features.handle_quick_action(
-                    action_id, user_id, channel, trigger_id
-                )
-                logger.info(f"Quick action result: {result}")
-
-            # Handle digest/reminder actions
-            elif action_id == 'check_deadlines':
-                slack_features.send_deadline_reminders(channel)
-            elif action_id == 'view_all_projects':
-                # Could open a modal or send a list
-                pass
-
-            # Handle file action buttons
-            elif action_id.startswith('file_summarize_'):
-                file_id = action.get('value')
-                # Trigger file summarization
-                logger.info(f"Summarize file: {file_id}")
-            elif action_id.startswith('file_keypoints_'):
-                file_id = action.get('value')
-                # Trigger key points extraction
-                logger.info(f"Extract key points from file: {file_id}")
-
-    elif action_type == 'view_submission':
-        # Handle modal submissions
-        view = payload.get('view', {})
-        callback_id = view.get('callback_id')
-        values = view.get('state', {}).get('values', {})
-        channel = view.get('private_metadata', '')
-
-        logger.info(f"Modal submission: {callback_id}")
-
-        # Extract form values and call appropriate endpoint
-        if callback_id == 'modal_branding':
-            # Extract branding data and generate
-            client_data = {}
-            for block_id, block_values in values.items():
-                for input_id, input_data in block_values.items():
-                    value = input_data.get('value') or input_data.get('selected_option', {}).get('value')
-                    client_data[block_id] = value
-
-            result = call_claude(BRANDING_PROMPT, client_data)
-            if result.get('success') and channel:
-                slack_bot._send_message(
-                    channel,
-                    f"*Branding Strategy Generated* ✨\n\n{result.get('response', '')[:3000]}"
-                )
-
-        elif callback_id == 'modal_research':
-            # Extract research topic and call Perplexity
-            topic = ''
-            depth = 'comprehensive'
-            for block_id, block_values in values.items():
-                for input_id, input_data in block_values.items():
-                    if block_id == 'topic':
-                        topic = input_data.get('value', '')
-                    elif block_id == 'depth':
-                        depth = input_data.get('selected_option', {}).get('value', 'comprehensive')
-
-            result = perplexity_client.research_topic(topic, depth)
-            if result.get('success') and channel:
-                slack_bot._send_message(
-                    channel,
-                    f"*Research Results: {topic}* 🔍\n\n{result.get('response', '')[:3000]}"
-                )
-
-        elif callback_id == 'modal_client_portal':
-            # Create client portal in Notion
-            client_data = {}
-            for block_id, block_values in values.items():
-                for input_id, input_data in block_values.items():
-                    value = input_data.get('value') or input_data.get('selected_option', {}).get('value', '')
-                    client_data[block_id] = value
-
-            # Parse services from comma-separated string
-            services_str = client_data.get('services', '')
-            services = [s.strip() for s in services_str.split(',') if s.strip()]
-
-            portal_data = {
-                'company_name': client_data.get('company_name', 'New Client'),
-                'contact_name': client_data.get('contact_name', ''),
-                'contact_email': client_data.get('contact_email', ''),
-                'industry': client_data.get('industry', ''),
-                'services': services,
-                'project_timeline': client_data.get('project_timeline', ''),
-                'goals': client_data.get('goals', '')
-            }
-
-            parent_page_id = os.getenv('NOTION_PORTALS_PAGE', '')
-            if parent_page_id:
-                result = notion_client.create_client_portal(parent_page_id, portal_data)
-                if result.get('success') and channel:
-                    slack_bot._send_message(
-                        channel,
-                        f"*Client Portal Created* 🏢\n\n"
-                        f"Company: {portal_data['company_name']}\n"
-                        f"Pages Created: {result.get('pages_created', 0)}\n"
-                        f"Portal URL: {result.get('portal_url', 'N/A')}"
-                    )
-                elif channel:
-                    slack_bot._send_message(
-                        channel,
-                        f"Failed to create portal: {result.get('error', 'Unknown error')}"
-                    )
-            elif channel:
-                slack_bot._send_message(
-                    channel,
-                    "NOTION_PORTALS_PAGE environment variable not set. Please configure it first."
-                )
-
-    return jsonify({'ok': True})
+    except Exception as e:
+        logger.error(f"Error processing Google Chat event: {e}")
+        return jsonify({
+            'text': 'Sorry, I encountered an error processing your request. Please try again.'
+        })
 
 
 # =============================================================================
-# SLACK FEATURE ENDPOINTS (Reminders, Digests, Quick Actions)
+# GOOGLE CHAT FEATURE ENDPOINTS (Reminders, Digests, Quick Actions)
 # =============================================================================
 
-@app.route('/slack/reminders', methods=['POST'])
-def slack_send_reminders():
+@app.route('/chat/reminders', methods=['POST'])
+def chat_send_reminders():
     """Manually trigger deadline reminders"""
     data = request.json or {}
-    channel = data.get('channel', '')
-    result = slack_features.send_deadline_reminders(channel)
+    space = data.get('space', '')
+    result = chat_features.send_deadline_reminders(space)
     return jsonify(result)
 
 
-@app.route('/slack/digest', methods=['POST'])
-def slack_send_digest():
+@app.route('/chat/digest', methods=['POST'])
+def chat_send_digest():
     """Manually trigger activity digest"""
     data = request.json or {}
-    channel = data.get('channel', '')
+    space = data.get('space', '')
     period = data.get('period', 'daily')
-    result = slack_features.send_digest(channel, period)
+    result = chat_features.send_digest(period, space)
     return jsonify(result)
 
 
-@app.route('/slack/quick-actions', methods=['POST'])
-def slack_quick_actions():
-    """Send quick actions menu to a channel"""
+@app.route('/chat/quick-actions', methods=['POST'])
+def chat_quick_actions():
+    """Send quick actions menu to a space"""
     data = request.json or {}
-    channel = data.get('channel', '')
-    thread_ts = data.get('thread_ts')
+    space = data.get('space', '')
 
-    if not channel:
-        return jsonify({'success': False, 'error': 'Channel is required'}), 400
+    if not space:
+        return jsonify({'success': False, 'error': 'Space is required'}), 400
 
-    result = slack_features.send_quick_actions_menu(channel, thread_ts)
+    result = chat_features.send_quick_actions_card(space)
     return jsonify(result)
 
 
@@ -1027,7 +839,7 @@ def receive_contact():
             <p><strong>Message:</strong> {contact_data.get('message', 'N/A')}</p>
             <hr>
             <p><strong>Deliverables Generated:</strong> {len(deliverables)}</p>
-            <p><em>Full deliverables sent to Slack channel for review.</em></p>
+            <p><em>Full deliverables sent to Google Chat space for review.</em></p>
             """
             team_result = send_email(
                 to_email=team_email,
@@ -1037,51 +849,79 @@ def receive_contact():
             )
             team_email_sent = team_result.get('success', False)
 
-        # Send FULL DELIVERABLES to Slack for team review
-        slack_notified = False
-        if slack_bot.is_configured():
-            notification_channel = os.getenv('SLACK_NOTIFICATION_CHANNEL', '')
-            if notification_channel:
+        # Send FULL DELIVERABLES to Google Chat for team review
+        chat_notified = False
+        if chat_bot.is_configured():
+            notification_space = os.getenv('GOOGLE_CHAT_NOTIFICATION_SPACE', '')
+            if notification_space:
                 try:
-                    # First message: Lead info summary
-                    slack_bot._send_message(
-                        notification_channel,
-                        f"*New Lead* 📬 *{company_name}*\n\n"
-                        f"*Contact:* {contact_data.get('contact_name', 'N/A')} ({contact_email})\n"
-                        f"*Phone:* {contact_data.get('phone', 'N/A')}\n"
-                        f"*Industry:* {contact_data.get('industry', 'N/A')}\n"
-                        f"*Services:* {', '.join(contact_data.get('key_services', []))}\n"
-                        f"*Budget:* {contact_data.get('budget', 'N/A')}\n"
-                        f"*Timeline:* {contact_data.get('timeline', 'N/A')}\n"
-                        f"*Message:* {contact_data.get('message', 'N/A')}\n\n"
-                        f"_Thank you email sent to lead: {'Yes' if lead_email_sent else 'No'}_\n"
-                        f"_Team email sent: {'Yes' if team_email_sent else 'No'}_\n\n"
-                        f"*Deliverables generated below* ⬇️"
-                    )
+                    # First message: Lead info summary card
+                    lead_card = {
+                        "cardsV2": [{
+                            "cardId": f"lead_{company_name.replace(' ', '_')}",
+                            "card": {
+                                "header": {
+                                    "title": f"New Lead: {company_name}",
+                                    "subtitle": "Contact Form Submission",
+                                    "imageUrl": "https://www.gstatic.com/images/icons/material/system/2x/person_add_black_48dp.png",
+                                    "imageType": "CIRCLE"
+                                },
+                                "sections": [
+                                    {
+                                        "header": "Contact Information",
+                                        "widgets": [
+                                            {"decoratedText": {"topLabel": "Name", "text": contact_data.get('contact_name', 'N/A')}},
+                                            {"decoratedText": {"topLabel": "Email", "text": contact_email}},
+                                            {"decoratedText": {"topLabel": "Phone", "text": contact_data.get('phone', 'N/A')}},
+                                            {"decoratedText": {"topLabel": "Industry", "text": contact_data.get('industry', 'N/A')}}
+                                        ]
+                                    },
+                                    {
+                                        "header": "Project Details",
+                                        "widgets": [
+                                            {"decoratedText": {"topLabel": "Services", "text": ', '.join(contact_data.get('key_services', []))}},
+                                            {"decoratedText": {"topLabel": "Budget", "text": contact_data.get('budget', 'N/A')}},
+                                            {"decoratedText": {"topLabel": "Timeline", "text": contact_data.get('timeline', 'N/A')}},
+                                            {"decoratedText": {"topLabel": "Message", "text": contact_data.get('message', 'N/A')[:200]}}
+                                        ]
+                                    },
+                                    {
+                                        "header": "Status",
+                                        "widgets": [
+                                            {"decoratedText": {"text": f"Thank you email sent: {'Yes' if lead_email_sent else 'No'}"}},
+                                            {"decoratedText": {"text": f"Team email sent: {'Yes' if team_email_sent else 'No'}"}},
+                                            {"decoratedText": {"text": f"Deliverables generated: {len(deliverables)}"}}
+                                        ]
+                                    }
+                                ]
+                            }
+                        }]
+                    }
+                    chat_bot.send_message(notification_space, lead_card)
 
                     # Send each deliverable as a separate message for readability
                     deliverable_titles = {
-                        'branding': '🎨 Brand Strategy',
-                        'website': '🌐 Website Design Plan',
-                        'social': '📱 Social Media Strategy',
-                        'copywriting': '✍️ Marketing Copy'
+                        'branding': 'Brand Strategy',
+                        'website': 'Website Design Plan',
+                        'social': 'Social Media Strategy',
+                        'copywriting': 'Marketing Copy'
                     }
 
                     for key, title in deliverable_titles.items():
                         if key in deliverables:
                             content = deliverables[key].get('response', '')
-                            # Truncate if too long for Slack (max ~4000 chars per message)
+                            # Truncate if too long (max ~4000 chars per message)
                             if len(content) > 3500:
                                 content = content[:3500] + "\n\n_[Content truncated - see full version in API response]_"
 
-                            slack_bot._send_message(
-                                notification_channel,
-                                f"*{title}* for {company_name}\n\n{content}"
+                            chat_bot.send_message(
+                                notification_space,
+                                {"text": f"*{title}* for {company_name}\n\n{content}"}
                             )
 
-                    slack_notified = True
+                    chat_notified = True
                 except Exception as e:
-                    logger.error(f"Failed to send Slack notification: {e}")
+                    logger.error(f"Failed to send Google Chat notification: {e}")
 
         # Return response with generated deliverables
         return jsonify({
@@ -1092,7 +932,7 @@ def receive_contact():
             'notifications': {
                 'lead_thank_you_email': lead_email_sent,
                 'team_email_sent': team_email_sent,
-                'slack_deliverables_sent': slack_notified
+                'chat_deliverables_sent': chat_notified
             },
             'assessment': assessment,
             'deliverables': {
@@ -1130,7 +970,7 @@ if __name__ == '__main__':
 
     print("\nIntegration Endpoints:")
     print("  Notion: /notion/project, /meeting-notes, /search")
-    print("  Slack Bot: /slack/events, /slack/interact")
+    print("  Google Chat: /chat/events, /chat/reminders, /chat/digest")
 
     print("\nContact Form Endpoint:")
     print("  POST /api/contact (generates deliverables + sends email)")
