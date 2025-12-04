@@ -86,3 +86,27 @@ service-account*.json
 # Backup files
 *.bak
 *.backup
+
+# Development/Planning Documentation (not needed for live site)
+PROJECT_PLAN.md
+MWD_ASSISTANT_CAPABILITIES.md
+SLACK_SETUP.md
+docs/
+
+# Screenshots and images (reference only)
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+
+# Test files
+test_*.py
+*_test.py
+tests/
+
+# Claude Code configuration
+.claude/
+
+# Example/template files
+.env.example
